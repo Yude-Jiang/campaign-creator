@@ -99,8 +99,7 @@ function switchTabCSS(tabIndex) {
   document.querySelectorAll('.tab-panel').forEach((panel, i) => {
     panel.classList.toggle('active', i === tabIndex);
   });
-  const footer = document.getElementById('footer-nav');
-  if (footer) footer.style.display = (tabIndex === 0) ? 'none' : 'flex';
+  // Footer always visible — Tab 0 has the submit button
 }
 
 /** Legacy alias — used by old code paths. */
