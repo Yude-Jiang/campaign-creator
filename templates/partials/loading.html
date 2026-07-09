@@ -1,0 +1,8 @@
+<!-- Loading overlay for LLM generation -->
+<div class="loading-overlay" id="llm-loading" style="display:none;">
+  <div class="spinner"></div>
+  <div class="loading-text" id="llm-loading-text">
+    {{ loading_text or "Generating with AI..." }}
+  </div>
+  <div style="font-size:11px;color:var(--slate);margin-top:4px;" id="llm-model-info"></div>
+</div>

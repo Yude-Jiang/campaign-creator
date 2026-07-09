@@ -1,0 +1,366 @@
+"""Campaign CRUD API."""
+
+import json
+import logging
+import re
+from datetime import datetime
+
+from fastapi import APIRouter, HTTPException, Query, UploadFile
+from fastapi.responses import PlainTextResponse, HTMLResponse
+from pydantic import BaseModel
+
+from app.models.campaign import Campaign, CampaignBrief
+from app.utils.file_handler import (
+    load_campaign_json,
+    list_campaigns,
+    save_campaign_json,
+    save_diagnosis_file,
+)
+
+logger = logging.getLogger(__name__)
+router = APIRouter()
+
+
+def _slugify(name: str) -> str:
+    """Generate a safe campaign ID from a name."""
+    slug = re.sub(r"[^a-zA-Z0-9_一-鿿-]", "-", name.lower().strip())
+    slug = re.sub(r"-+", "-", slug).strip("-")
+    return slug or "untitled"
+
+
+# ── Campaign CRUD ──
+
+
+class CampaignCreateRequest(BaseModel):
+    brief: CampaignBrief
+
+
+@router.post("/campaigns")
+def create_campaign(req: CampaignCreateRequest):
+    """Create a new campaign from the brief."""
+    campaign_id = _slugify(req.brief.name) if req.brief.name else f"campaign-{datetime.now():%Y%m%d-%H%M%S}"
+
+    # Check for duplicate
+    existing = load_campaign_json(campaign_id)
+    if existing:
+        campaign_id = f"{campaign_id}-{datetime.now():%H%M%S}"
+
+    campaign = Campaign(
+        campaign_id=campaign_id,
+        language=req.brief.language,
+        brief=req.brief,
+        current_tab=1,
+    )
+
+    save_campaign_json(campaign_id, campaign.model_dump())
+    return {"campaign_id": campaign_id, "redirect": f"/campaigns/{campaign_id}"}
+
+
+@router.get("/campaigns")
+def list_all_campaigns():
+    """List all campaigns."""
+    return {"campaigns": list_campaigns()}
+
+
+@router.get("/campaigns/{campaign_id}")
+def get_campaign(campaign_id: str):
+    """Get a campaign by ID."""
+    data = load_campaign_json(campaign_id)
+    if not data:
+        raise HTTPException(status_code=404, detail="Campaign not found")
+    return data
+
+
+@router.put("/campaigns/{campaign_id}")
+def update_campaign(campaign_id: str, data: dict):
+    """Update campaign data (full replace)."""
+    existing = load_campaign_json(campaign_id)
+    if not existing:
+        raise HTTPException(status_code=404, detail="Campaign not found")
+    data["updated_at"] = datetime.now().isoformat()
+    save_campaign_json(campaign_id, data)
+    return {"ok": True, "campaign_id": campaign_id}
+
+
+@router.put("/campaigns/{campaign_id}/tab")
+def advance_tab(campaign_id: str, tab: int):
+    """Advance the campaign to a specific tab (0-3)."""
+    data = load_campaign_json(campaign_id)
+    if not data:
+        raise HTTPException(status_code=404, detail="Campaign not found")
+    data["current_tab"] = tab
+    data["updated_at"] = datetime.now().isoformat()
+    save_campaign_json(campaign_id, data)
+    return {"ok": True, "current_tab": tab}
+
+
+# ── Diagnosis Upload ──
+
+
+@router.post("/campaigns/{campaign_id}/diagnosis/upload")
+async def upload_diagnosis(campaign_id: str, question_id: str, file: UploadFile):
+    """Upload a single GEO diagnosis file for a question."""
+    data = load_campaign_json(campaign_id)
+    if not data:
+        raise HTTPException(status_code=404, detail="Campaign not found")
+
+    content = await file.read()
+    saved_path = save_diagnosis_file(campaign_id, question_id, content, file.filename or f"{question_id}.md")
+
+    # Update campaign diagnoses list
+    diagnoses = data.get("diagnoses", [])
+    existing_idx = next((i for i, d in enumerate(diagnoses) if d.get("question_id") == question_id), None)
+    entry = {
+        "question_id": question_id,
+        "filename": saved_path.name,  # Use actual saved filename (e.g. "q1.md"), not upload name
+        "uploaded_at": datetime.now().isoformat(),
+    }
+    if existing_idx is not None:
+        diagnoses[existing_idx] = entry
+    else:
+        diagnoses.append(entry)
+
+    data["diagnoses"] = diagnoses
+    data["updated_at"] = datetime.now().isoformat()
+    save_campaign_json(campaign_id, data)
+
+    return {"ok": True, "question_id": question_id, "filename": file.filename}
+
+
+@router.get("/campaigns/{campaign_id}/diagnosis/status")
+def diagnosis_status(campaign_id: str):
+    """Get diagnosis upload status (which questions have files)."""
+    data = load_campaign_json(campaign_id)
+    if not data:
+        raise HTTPException(status_code=404, detail="Campaign not found")
+
+    questions = data.get("questions", [])
+    diagnoses = data.get("diagnoses", [])
+    diag_ids = {d["question_id"] for d in diagnoses}
+
+    return {
+        "total": len(questions),
+        "uploaded": len(diag_ids),
+        "missing": [q["id"] for q in questions if q["id"] not in diag_ids],
+    }
+
+
+# ═══════════════════════════════════════════════════════════════
+# Persona & Questions Generation
+# ═══════════════════════════════════════════════════════════════
+
+
+@router.post("/campaigns/{campaign_id}/persona/generate")
+async def generate_persona(campaign_id: str):
+    """Generate Personas, Value Propositions, and Benchmark Questions via LLM."""
+    data = load_campaign_json(campaign_id)
+    if not data:
+        raise HTTPException(status_code=404, detail="Campaign not found")
+
+    from app.services.persona_service import generate_personas_and_questions
+
+    language = data.get("language", "zh")
+    result = await generate_personas_and_questions(data, language=language)
+
+    data["personas"] = result.get("personas", [])
+    data["questions"] = result.get("questions", [])
+    data["updated_at"] = datetime.now().isoformat()
+    save_campaign_json(campaign_id, data)
+
+    return {
+        "ok": True,
+        "campaign_id": campaign_id,
+        "personas_count": len(data["personas"]),
+        "questions_count": len(data["questions"]),
+        "model": result.get("model", ""),
+        "grounding_used": result.get("grounding_used", False),
+    }
+
+
+class PersonaUpdateRequest(BaseModel):
+    personas: list[dict] | None = None
+    questions: list[dict] | None = None
+
+
+@router.put("/campaigns/{campaign_id}/persona")
+def update_persona(campaign_id: str, body: PersonaUpdateRequest):
+    """Save user-edited personas and/or questions."""
+    data = load_campaign_json(campaign_id)
+    if not data:
+        raise HTTPException(status_code=404, detail="Campaign not found")
+
+    if body.personas is not None:
+        data["personas"] = body.personas
+    if body.questions is not None:
+        data["questions"] = body.questions
+
+    data["updated_at"] = datetime.now().isoformat()
+    save_campaign_json(campaign_id, data)
+
+    return {"ok": True, "campaign_id": campaign_id}
+
+
+# ═══════════════════════════════════════════════════════════════
+# Campaign Plan Generation
+# ═══════════════════════════════════════════════════════════════
+
+
+@router.post("/campaigns/{campaign_id}/plan/generate")
+async def generate_plan(campaign_id: str):
+    """Generate a full Campaign Plan from diagnosis data via LLM."""
+    data = load_campaign_json(campaign_id)
+    if not data:
+        raise HTTPException(status_code=404, detail="Campaign not found")
+
+    from app.services.plan_service import generate_campaign_plan
+
+    language = data.get("language", "zh")
+    try:
+        plan = await generate_campaign_plan(data, language=language)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except RuntimeError as e:
+        raise HTTPException(status_code=502, detail=str(e))
+
+    data["plan"] = plan
+    data["updated_at"] = datetime.now().isoformat()
+    save_campaign_json(campaign_id, data)
+
+    return {
+        "ok": True,
+        "campaign_id": campaign_id,
+        "priorities_count": len(plan.get("priorities", [])),
+        "meta": plan.get("_generation_meta", {}),
+    }
+
+
+@router.get("/campaigns/{campaign_id}/plan/export/md", response_class=PlainTextResponse)
+def export_plan_markdown(campaign_id: str, lang: str = Query("zh")):
+    """Export campaign plan as Markdown."""
+    data = load_campaign_json(campaign_id)
+    if not data:
+        raise HTTPException(status_code=404, detail="Campaign not found")
+
+    plan = data.get("plan", {})
+    if not plan:
+        raise HTTPException(status_code=400, detail="No plan generated yet")
+
+    from app.services.export_service import export_to_markdown
+
+    md = export_to_markdown(plan, data)
+    return PlainTextResponse(
+        content=md,
+        media_type="text/markdown; charset=utf-8",
+        headers={"Content-Disposition": f"attachment; filename={campaign_id}_plan.md"},
+    )
+
+
+@router.get("/campaigns/{campaign_id}/plan/export/html", response_class=HTMLResponse)
+def export_plan_html(campaign_id: str, lang: str = Query("zh")):
+    """Export campaign plan as styled HTML report."""
+    data = load_campaign_json(campaign_id)
+    if not data:
+        raise HTTPException(status_code=404, detail="Campaign not found")
+
+    plan = data.get("plan", {})
+    if not plan:
+        raise HTTPException(status_code=400, detail="No plan generated yet")
+
+    from app.services.export_service import export_to_html
+
+    html = export_to_html(plan, data)
+    return HTMLResponse(content=html)
+
+
+# ── Content Studio (Tab 4) ──
+
+
+class ContentGenerateRequest(BaseModel):
+    priority_index: int
+    content_index: int
+
+
+@router.post("/campaigns/{campaign_id}/content/generate")
+async def generate_content(campaign_id: str, body: ContentGenerateRequest):
+    """Generate content for a specific content plan item via LLM."""
+    data = load_campaign_json(campaign_id)
+    if not data:
+        raise HTTPException(status_code=404, detail="Campaign not found")
+
+    from app.services.content_service import generate_content as generate_content_item
+
+    language = data.get("language", "zh")
+    try:
+        result = await generate_content_item(
+            data,
+            priority_index=body.priority_index,
+            content_index=body.content_index,
+            language=language,
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except RuntimeError as e:
+        raise HTTPException(status_code=502, detail=str(e))
+
+    # Persist generated content back to campaign
+    plan = data.get("plan", {})
+    priorities = plan.get("priorities", [])
+    if body.priority_index < len(priorities):
+        content_plan = priorities[body.priority_index].get("content_plan", [])
+        if body.content_index < len(content_plan):
+            item = content_plan[body.content_index]
+            item["generated_content"] = result["text"]
+            item["generated_model"] = result["model"]
+            item["generated_at"] = datetime.now().isoformat()
+
+    data["updated_at"] = datetime.now().isoformat()
+    save_campaign_json(campaign_id, data)
+
+    return {
+        "ok": True,
+        "campaign_id": campaign_id,
+        "priority_index": body.priority_index,
+        "content_index": body.content_index,
+        "content": result["text"],
+        "model": result["model"],
+        "format": result.get("format", ""),
+    }
+
+
+@router.get("/campaigns/{campaign_id}/export/all")
+def export_full_campaign(campaign_id: str):
+    """Export the entire campaign as a JSON file for backup/transfer."""
+    data = load_campaign_json(campaign_id)
+    if not data:
+        raise HTTPException(status_code=404, detail="Campaign not found")
+
+    from fastapi.responses import Response
+
+    return Response(
+        content=json.dumps(data, ensure_ascii=False, indent=2, default=str),
+        media_type="application/json; charset=utf-8",
+        headers={"Content-Disposition": f"attachment; filename={campaign_id}_full.json"},
+    )
+
+
+class CampaignImportRequest(BaseModel):
+    campaign_id: str | None = None
+    data: dict
+
+
+@router.post("/campaigns/import")
+def import_campaign(req: CampaignImportRequest):
+    """Import a campaign from a JSON export file."""
+    campaign_id = req.campaign_id or req.data.get("campaign_id", "")
+    if not campaign_id:
+        raise HTTPException(status_code=400, detail="No campaign_id in import data")
+
+    # If campaign already exists, create a copy with timestamp
+    existing = load_campaign_json(campaign_id)
+    if existing:
+        campaign_id = f"{campaign_id}-import-{datetime.now():%H%M%S}"
+        req.data["campaign_id"] = campaign_id
+
+    req.data["updated_at"] = datetime.now().isoformat()
+    save_campaign_json(campaign_id, req.data)
+    return {"ok": True, "campaign_id": campaign_id}

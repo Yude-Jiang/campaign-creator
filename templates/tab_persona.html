@@ -1,0 +1,91 @@
+{% extends "base.html" %}
+{% block title %}Persona & Questions — {{ campaign.brief.name if campaign else '' }}{% endblock %}
+
+{% block content %}
+{% include "partials/loading.html" %}
+<div class="tab-panel {{ 'active' if active_tab == 1 else '' }}" id="panel-persona">
+
+  <div style="margin-bottom: 28px;">
+    <h2 style="font-size:22px;font-weight:700;color:var(--navy);margin-bottom:6px;">
+      {% if language == 'zh' %}Persona · Value Proposition · Questions{% else %}Persona · Value Proposition · Questions{% endif %}
+    </h2>
+    <p style="color:var(--slate);font-size:14px;">
+      {% if language == 'zh' %}
+      AI 将分析 Campaign Brief，搜索技术社区，生成目标 Persona、差异化 Value Proposition 和 Benchmark Questions。
+      {% else %}
+      AI will analyze the campaign brief, search tech communities, and generate personas, differentiated value propositions, and benchmark questions.
+      {% endif %}
+    </p>
+  </div>
+
+  {% if not campaign.personas %}
+  <!-- Not yet generated -->
+  <div class="card" style="text-align:center;padding:40px;">
+    <div style="font-size:48px;margin-bottom:12px;">👥</div>
+    <h3 style="color:var(--navy);margin-bottom:8px;">
+      {% if language == 'zh' %}尚未生成 Persona{% else %}Personas Not Generated Yet{% endif %}
+    </h3>
+    <p style="color:var(--slate);font-size:14px;margin-bottom:20px;">
+      {% if language == 'zh' %}
+      点击下方按钮，AI 将基于你的 Brief 分析目标人群并生成 Benchmark Questions。
+      <br>此过程会启用 <strong>Web Grounding</strong>，搜索真实社区讨论。
+      {% else %}
+      Click below to have AI analyze your brief, research target audiences, and generate benchmark questions.
+      <br>This process uses <strong>Web Grounding</strong> to search real community discussions.
+      {% endif %}
+    </p>
+    <button class="btn btn-primary" onclick="generatePersona()">
+      ⚡ {% if language == 'zh' %}生成 Persona & Questions{% else %}Generate Persona & Questions{% endif %}
+    </button>
+  </div>
+
+  {% else %}
+  <!-- Generated content shown here (Phase 1d will fill this in) -->
+  <div class="card">
+    <div class="card-header">
+      {% if language == 'zh' %}Persona 列表{% else %}Persona List{% endif %}
+    </div>
+    <div class="card-body">
+      {% for p in campaign.personas %}
+      <div style="padding:12px;border:1px solid var(--line);border-radius:8px;margin-bottom:10px;">
+        <strong>{{ p.name }}</strong> —
+        <span class="chip chip-{{ 'strong' if p.decision_weight == 'high' else 'moderate' if p.decision_weight == 'medium' else 'weak' }}">{{ p.layer }}</span>
+        <p style="color:var(--slate);font-size:13px;margin-top:4px;">{{ p.value_proposition[:120] }}{% if p.value_proposition|length > 120 %}...{% endif %}</p>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+  {% endif %}
+
+</div>
+{% endblock %}
+
+{% block footer_buttons %}
+<button class="btn btn-secondary" onclick="navigateToTab(0)">
+  ← {% if language == 'zh' %}返回 Brief{% else %}Back to Brief{% endif %}
+</button>
+{% if campaign.personas %}
+<button class="btn btn-primary" onclick="navigateToTab(2)">
+  {% if language == 'zh' %}继续 → GEO Diagnosis{% else %}Next → GEO Diagnosis{% endif %}
+</button>
+{% endif %}
+{% endblock %}
+
+{% block extra_js %}
+<script>
+async function generatePersona() {
+  const loading = document.getElementById('llm-loading');
+  if (loading) loading.style.display = 'flex';
+
+  try {
+    await apiFetch('/api/campaigns/{{ campaign_id }}/persona/generate', { method: 'POST' });
+    window.location.reload();
+  } catch (err) {
+    alert('Generation failed: ' + err.message);
+  } finally {
+    if (loading) loading.style.display = 'none';
+  }
+}
+
+</script>
+{% endblock %}

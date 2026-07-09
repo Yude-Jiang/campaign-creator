@@ -1,0 +1,166 @@
+{% extends "base.html" %}
+{% block title %}Campaign Brief — Campaign Factory{% endblock %}
+
+{% block content %}
+
+<div class="tab-panel active" id="panel-brief">
+  <div style="max-width: 700px;">
+
+    <div style="margin-bottom: 28px;">
+      <h2 style="font-size:22px;font-weight:700;color:var(--navy);margin-bottom:6px;">
+        {% if language == 'zh' %}创建新的 Campaign{% else %}Create New Campaign{% endif %}
+      </h2>
+      <p style="color:var(--slate);font-size:14px;">
+        {% if language == 'zh' %}
+        填写 Campaign 基本信息。AI 将基于此生成 Persona、Benchmark Questions 和完整的 Campaign 计划。
+        {% else %}
+        Fill in the campaign basics. AI will generate personas, benchmark questions, and a full campaign plan from this.
+        {% endif %}
+      </p>
+    </div>
+
+    {% if error %}
+    <div class="alert alert-danger">
+      <strong>⚠</strong> {{ error }}
+    </div>
+    {% endif %}
+
+    <form id="brief-form" onsubmit="submitBrief(event)">
+      <!-- Campaign Name -->
+      <div class="form-group">
+        <label>
+          {% if language == 'zh' %}Campaign 名称{% else %}Campaign Name{% endif %}
+          <span style="color:var(--red);">*</span>
+        </label>
+        <div class="hint">
+          {% if language == 'zh' %}例如：ST ZCU 方案中国市场 Campaign 2026Q3{% else %}e.g. ST ZCU China Market Campaign 2026Q3{% endif %}
+        </div>
+        <input type="text" class="form-control" id="brief-name" required
+               placeholder="{% if language == 'zh' %}输入 Campaign 名称{% else %}Enter campaign name{% endif %}">
+      </div>
+
+      <!-- Topic -->
+      <div class="form-group">
+        <label>
+          {% if language == 'zh' %}技术主题{% else %}Technical Topic{% endif %}
+          <span style="color:var(--red);">*</span>
+        </label>
+        <div class="hint">
+          {% if language == 'zh' %}这个 Campaign 围绕什么技术/方案？{% else %}What technology/solution is this campaign about?{% endif %}
+        </div>
+        <input type="text" class="form-control" id="brief-topic" required
+               placeholder="{% if language == 'zh' %}例如：ZCU / 区域控制器 / 汽车智能配电{% else %}e.g. ZCU / Zonal Controller / Automotive Smart Power{% endif %}">
+      </div>
+
+      <!-- Target Page URL -->
+      <div class="form-group">
+        <label>
+          {% if language == 'zh' %}目标 Application Page URL{% else %}Target Application Page URL{% endif %}
+          <span style="color:var(--red);">*</span>
+        </label>
+        <div class="hint">
+          {% if language == 'zh' %}ST 官网的 Application Page —— 这是所有内容和 AI 引用的最终指向{% else %}The ST application page — all content and AI citations should route here{% endif %}
+        </div>
+        <input type="url" class="form-control" id="brief-url" required
+               placeholder="https://www.st.com/...">
+      </div>
+
+      <!-- Products -->
+      <div class="form-group">
+        <label>
+          {% if language == 'zh' %}核心产品 / 方案{% else %}Core Products / Solutions{% endif %}
+          <span style="color:var(--red);">*</span>
+        </label>
+        <div class="hint">
+          {% if language == 'zh' %}用逗号分隔多个产品名{% else %}Comma-separated product names{% endif %}
+        </div>
+        <input type="text" class="form-control" id="brief-products" required
+               placeholder="{% if language == 'zh' %}例如：Stellar P3E, Stellar G, STi²Fuse{% else %}e.g. Stellar P3E, Stellar G, STi²Fuse{% endif %}">
+      </div>
+
+      <!-- Keywords -->
+      <div class="form-group">
+        <label>
+          {% if language == 'zh' %}期望 AI 关联的关键词{% else %}Desired AI Keywords{% endif %}
+          <span style="color:var(--red);">*</span>
+        </label>
+        <div class="hint">
+          {% if language == 'zh' %}你希望 AI 回答时关联到 ST 的中英文关键词{% else %}Keywords you want AI to associate with ST{% endif %}
+        </div>
+        <input type="text" class="form-control" id="brief-keywords" required
+               placeholder="{% if language == 'zh' %}例如：ZCU, 区域控制器, 汽车芯片, 智能配电, zone control unit{% else %}e.g. ZCU, zone controller, automotive chip, smart power{% endif %}">
+      </div>
+
+      <!-- Known Competitors (Optional) -->
+      <div class="form-group">
+        <label>
+          {% if language == 'zh' %}已知竞品（可选）{% else %}Known Competitors (Optional){% endif %}
+        </label>
+        <div class="hint">
+          {% if language == 'zh' %}你已经知道的竞争对手，用逗号分隔。AI 在诊断时会额外关注{% else %}Competitors you already know about, comma-separated{% endif %}
+        </div>
+        <input type="text" class="form-control" id="brief-competitors"
+               placeholder="{% if language == 'zh' %}例如：NXP S32G, Infineon AURIX, TI, 地平线{% else %}e.g. NXP S32G, Infineon AURIX, TI, Horizon{% endif %}">
+      </div>
+
+      <!-- Notes (Optional) -->
+      <div class="form-group">
+        <label>
+          {% if language == 'zh' %}补充说明（可选）{% else %}Additional Notes (Optional){% endif %}
+        </label>
+        <textarea class="form-control" id="brief-notes" rows="3"
+                  placeholder="{% if language == 'zh' %}预算、时间约束、特殊要求、已有内容链接等{% else %}Budget, timeline, special requirements, existing content links{% endif %}"></textarea>
+      </div>
+    </form>
+  </div>
+</div>
+
+{% endblock %}
+
+{% block footer_buttons %}
+<button type="button" class="btn btn-primary" onclick="submitBrief(event)">
+  {% if language == 'zh' %}生成 Persona & Questions →{% else %}Generate Persona & Questions →{% endif %}
+</button>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+async function submitBrief(e) {
+  e.preventDefault();
+
+  const name = document.getElementById('brief-name').value.trim();
+  const topic = document.getElementById('brief-topic').value.trim();
+  const url = document.getElementById('brief-url').value.trim();
+  const products = document.getElementById('brief-products').value.trim();
+  const keywords = document.getElementById('brief-keywords').value.trim();
+  const competitors = document.getElementById('brief-competitors').value.trim();
+  const notes = document.getElementById('brief-notes').value.trim();
+
+  if (!name || !topic || !url || !products || !keywords) {
+    alert('Please fill in all required fields marked with *');
+    return;
+  }
+
+  const brief = {
+    name, topic, target_page_url: url,
+    products: products.split(',').map(s => s.trim()).filter(Boolean),
+    keywords: keywords.split(',').map(s => s.trim()).filter(Boolean),
+    competitors_known: competitors.split(',').map(s => s.trim()).filter(Boolean),
+    materials: [],
+    notes,
+    language: '{{ language }}',
+  };
+
+  try {
+    const resp = await apiFetch('/api/campaigns', {
+      method: 'POST',
+      body: JSON.stringify({ brief }),
+    });
+    // Redirect to campaign page
+    window.location.href = resp.redirect;
+  } catch (err) {
+    alert('Failed to create campaign: ' + err.message);
+  }
+}
+</script>
+{% endblock %}

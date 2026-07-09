@@ -1,0 +1,202 @@
+{% extends "base.html" %}
+{% block title %}Content Studio — {{ campaign.brief.name if campaign else '' }}{% endblock %}
+
+{% block content %}
+{% include "partials/loading.html" %}
+<div class="tab-panel {{ 'active' if active_tab == 4 else '' }}" id="panel-content">
+
+  <div style="margin-bottom: 28px;">
+    <h2 style="font-size:22px;font-weight:700;color:var(--navy);margin-bottom:6px;">
+      {% if language == 'zh' %}Content Studio — 内容工作室{% else %}Content Studio{% endif %}
+    </h2>
+    <p style="color:var(--slate);font-size:14px;">
+      {% if language == 'zh' %}
+      基于 Campaign Plan 中的内容策略卡片，为每个渠道生成定制化内容。可复制 prompt 或直接调用 AI 生成。
+      {% else %}
+      Generate channel-specific content based on the Campaign Plan's strategy cards. Copy prompts or generate content directly via AI.
+      {% endif %}
+    </p>
+  </div>
+
+  {% if not campaign.plan or not campaign.plan.get('priorities') %}
+  <!-- Empty state: no plan yet -->
+  <div class="card" style="text-align:center;padding:40px;">
+    <div style="font-size:48px;margin-bottom:12px;">📝</div>
+    <h3 style="color:var(--navy);margin-bottom:8px;">
+      {% if language == 'zh' %}请先生成 Campaign Plan{% else %}Please Generate a Campaign Plan First{% endif %}
+    </h3>
+    <p style="color:var(--slate);font-size:14px;margin-bottom:20px;">
+      {% if language == 'zh' %}
+      Content Studio 依赖 Tab 3 中生成的内容策略卡片。<br>请先在 Tab 3 生成 Campaign Plan，再来这里创建内容。
+      {% else %}
+      Content Studio depends on the strategy cards generated in Tab 3.<br>Please generate a Campaign Plan in Tab 3 first, then return here to create content.
+      {% endif %}
+    </p>
+    <button class="btn btn-secondary" onclick="navigateToTab(3)">
+      ← {% if language == 'zh' %}前往 Tab 3: Campaign Plan{% else %}Go to Tab 3: Campaign Plan{% endif %}
+    </button>
+  </div>
+
+  {% else %}
+  <!-- Content cards -->
+  {% set priorities = sorted_priorities %}
+
+  {% for pi in range(priorities|length) %}
+  {% set p = priorities[pi] %}
+  <div class="card" style="margin-bottom:20px;">
+    <div class="card-header" style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+      <span class="priority priority-{{ p.priority|lower }}">{{ p.priority }}</span>
+      <span style="font-weight:600;flex:1;">{{ p.get('question_text', '') or p.get('anchor_point', 'Question ' ~ (pi + 1)) }}</span>
+      <span style="font-size:12px;color:var(--slate);padding:2px 8px;background:var(--bg);border-radius:4px;">
+        {{ p.get('gap_type', '').replace('_', ' ') }}
+      </span>
+    </div>
+    <div class="card-body">
+      <p style="font-size:13px;color:var(--slate);margin-bottom:12px;">
+        <strong>{% if language == 'zh' %}锚点：{% else %}Anchor:{% endif %}</strong>
+        {{ p.get('anchor_point', '') }}
+      </p>
+
+      <!-- Content plan items for this priority -->
+      {% set content_plan = p.get('content_plan', []) %}
+      {% for ci in range(content_plan|length) %}
+      {% set item = content_plan[ci] %}
+      <div class="content-item" style="margin-top:12px;padding:16px;background:var(--bg);border-radius:8px;border:1px solid var(--line);">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;flex-wrap:wrap;">
+          <span style="font-size:11px;font-weight:600;color:var(--navy);background:var(--blue);padding:2px 8px;border-radius:4px;color:#fff;">
+            {{ item.get('format', 'content') }}
+          </span>
+          <span style="font-size:12px;color:var(--slate);">📡 {{ item.get('channel', '') }}</span>
+          <span style="font-size:11px;color:var(--slate);padding:2px 6px;background:var(--paper);border-radius:4px;">
+            {{ item.get('channel_type', 'organic') }}
+          </span>
+          {% set pid = item.get('target_persona_id', '') %}
+          {% if pid is string %}
+            {% set persona_name = persona_map.get(pid, {}).get('name', pid) if persona_map else pid %}
+          {% else %}
+            {% set persona_name = persona_map.get(pid[0], {}).get('name', pid[0]) if pid and persona_map and pid[0] else pid %}
+          {% endif %}
+          <span style="font-size:11px;color:var(--slate);">👤 {{ persona_name }}</span>
+        </div>
+
+        <p style="font-size:14px;font-weight:600;color:var(--navy);margin-bottom:8px;">
+          {{ item.get('title_suggestion', '') }}
+        </p>
+
+        <!-- Action buttons -->
+        <div style="display:flex;gap:8px;margin-bottom:12px;">
+          <textarea id="prompt-{{ pi }}-{{ ci }}" style="display:none;">{{ item.get('llm_prompt', '') }}</textarea>
+          <button class="btn btn-secondary" style="font-size:12px;padding:6px 14px;"
+                  onclick="copyPrompt({{ pi }}, {{ ci }})">
+            📋 {% if language == 'zh' %}复制 Prompt{% else %}Copy Prompt{% endif %}
+          </button>
+          <button class="btn btn-primary" style="font-size:12px;padding:6px 14px;"
+                  id="gen-btn-{{ pi }}-{{ ci }}"
+                  onclick="generateContent({{ pi }}, {{ ci }})">
+            ⚡ {% if language == 'zh' %}生成内容{% else %}Generate Content{% endif %}
+          </button>
+        </div>
+
+        <!-- Generated content (pre-existing from campaign JSON) -->
+        {% if item.get('generated_content') %}
+        <div style="margin-top:8px;padding:16px;background:var(--paper);border-radius:8px;border:1px solid var(--blue);">
+          <div style="font-size:11px;color:var(--slate);margin-bottom:8px;display:flex;justify-content:space-between;">
+            <span>{% if language == 'zh' %}已生成{% else %}Generated{% endif %} — {{ item.get('generated_model', 'AI') }}</span>
+            <span>{{ item.get('generated_at', '')[:16] }}</span>
+          </div>
+          <div style="white-space:pre-wrap;font-size:14px;max-height:600px;overflow-y:auto;">{{ item.generated_content }}</div>
+        </div>
+        {% endif %}
+
+        <!-- Dynamic result container for JS generation -->
+        <div id="content-result-{{ pi }}-{{ ci }}" style="margin-top:8px;"></div>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+  {% endfor %}
+
+  {% endif %}
+
+</div>
+{% endblock %}
+
+{% block footer_buttons %}
+<button class="btn btn-secondary" onclick="navigateToTab(3)">
+  ← {% if language == 'zh' %}返回 Campaign Plan{% else %}Back to Campaign Plan{% endif %}
+</button>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+async function copyPrompt(pi, ci) {
+  const textarea = document.getElementById('prompt-' + pi + '-' + ci);
+  if (!textarea) return;
+  try {
+    await navigator.clipboard.writeText(textarea.value);
+    // Brief visual feedback
+    const btn = event.target;
+    const original = btn.textContent;
+    btn.textContent = '{% if language == "zh" %}已复制！{% else %}Copied!{% endif %}';
+    btn.style.background = '#22c55e';
+    setTimeout(() => {
+      btn.textContent = original;
+      btn.style.background = '';
+    }, 1500);
+  } catch (err) {
+    // Fallback for older browsers
+    textarea.style.display = 'block';
+    textarea.select();
+    document.execCommand('copy');
+    textarea.style.display = 'none';
+  }
+}
+
+async function generateContent(pi, ci) {
+  const loading = document.getElementById('llm-loading');
+  const btn = document.getElementById('gen-btn-' + pi + '-' + ci);
+  const resultDiv = document.getElementById('content-result-' + pi + '-' + ci);
+
+  if (loading) loading.style.display = 'flex';
+  if (btn) { btn.disabled = true; btn.textContent = '{% if language == "zh" %}生成中...{% else %}Generating...{% endif %}'; }
+
+  try {
+    const resp = await apiFetch('/api/campaigns/{{ campaign_id }}/content/generate', {
+      method: 'POST',
+      body: JSON.stringify({ priority_index: pi, content_index: ci }),
+    });
+
+    // Build result HTML
+    const html = `
+      <div style="margin-top:8px;padding:16px;background:var(--paper);border-radius:8px;border:1px solid var(--blue);">
+        <div style="font-size:11px;color:var(--slate);margin-bottom:8px;display:flex;justify-content:space-between;">
+          <span>{% if language == 'zh' %}已生成{% else %}Generated{% endif %} — ${resp.model}</span>
+          <span>${new Date().toISOString().slice(0, 16)}</span>
+        </div>
+        <div style="white-space:pre-wrap;font-size:14px;max-height:600px;overflow-y:auto;">${resp.content}</div>
+      </div>
+    `;
+
+    resultDiv.innerHTML = html;
+    // Remove any previous generated_content block above to avoid duplicates
+    const prev = resultDiv.parentElement.querySelector('.generated-content');
+    // Actually the old block is rendered server-side with the same container pattern,
+    // let's just scroll to the result
+    resultDiv.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+
+  } catch (err) {
+    resultDiv.innerHTML = `
+      <div style="margin-top:8px;padding:12px;background:#fef2f2;border-radius:8px;border:1px solid #fecaca;color:#dc2626;font-size:14px;">
+        {% if language == 'zh' %}生成失败：{% else %}Generation failed: {% endif %}${err.message}
+      </div>
+    `;
+  } finally {
+    if (loading) loading.style.display = 'none';
+    if (btn) {
+      btn.disabled = false;
+      btn.textContent = '⚡ {% if language == "zh" %}生成内容{% else %}Generate Content{% endif %}';
+    }
+  }
+}
+</script>
+{% endblock %}

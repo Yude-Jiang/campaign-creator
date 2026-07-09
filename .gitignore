@@ -1,0 +1,29 @@
+# Secrets
+.env
+gemini_key_temp.txt
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+
+# Runtime data (contains API keys in campaign JSON)
+data/
+
+# Temp files
+tmp_*
+*.tmp
+
+# IDE
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Virtual env
+.venv/
+venv/
+env/
+
+# Claude
+.claude/

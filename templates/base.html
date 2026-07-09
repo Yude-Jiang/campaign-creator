@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="{{ language }}">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}Campaign Factory{% endblock %}</title>
+  <link rel="stylesheet" href="/static/css/app.css">
+  {% block extra_css %}{% endblock %}
+</head>
+<body data-campaign-id="{{ campaign_id or '' }}">
+
+  <!-- Top Bar -->
+  <div class="topbar">
+    <div class="topbar-brand">
+      <span class="dot"></span>
+      Campaign Factory
+    </div>
+    <div class="topbar-actions">
+      <button class="lang-switch {{ 'active' if language == 'zh' else '' }}"
+              onclick="CampaignState.setLanguage('zh')">中文</button>
+      <button class="lang-switch {{ 'active' if language == 'en' else '' }}"
+              onclick="CampaignState.setLanguage('en')">EN</button>
+    </div>
+  </div>
+
+  <!-- Tab Navigation -->
+  <nav class="tab-nav">
+    {% for tab in tabs %}
+    <button class="tab-btn {% if tab.disabled %}disabled{% endif %}{% if loop.first %} active{% endif %}"
+            {{ 'disabled' if tab.disabled else '' }}>
+      <span class="tab-num">{{ tab.num }}</span> {{ tab.label }}
+    </button>
+    {% endfor %}
+  </nav>
+
+  <!-- Main Content -->
+  <main class="main-content">
+    {% block content %}{% endblock %}
+  </main>
+
+  <!-- Footer Nav -->
+  {% block footer_nav %}
+  <div class="footer-nav" id="footer-nav">
+    <div class="saved-indicator" id="save-indicator">
+      <span class="dot"></span> All changes saved
+    </div>
+    <div style="display:flex;gap:8px;">
+      {% block footer_buttons %}{% endblock %}
+    </div>
+  </div>
+  {% endblock %}
+
+  <script src="/static/js/app.js"></script>
+  {% block extra_js %}{% endblock %}
+</body>
+</html>

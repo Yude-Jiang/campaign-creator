@@ -1,0 +1,33 @@
+# Ignore local environment and secrets
+.env
+*.env
+
+# Ignore local data
+data/
+tmp_*
+
+# Ignore IDE and OS files
+.vscode/
+.idea/
+__pycache__/
+*.pyc
+*.pyo
+.DS_Store
+Thumbs.db
+
+# Ignore test and dev files
+tests/
+.pytest_cache/
+.ruff_cache/
+
+# Ignore git
+.git/
+.gitignore
+
+# Ignore Python virtual envs
+.venv/
+venv/
+env/
+
+# Ignore Claude plans and sessions
+.claude/

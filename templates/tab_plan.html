@@ -1,0 +1,91 @@
+{% extends "base.html" %}
+{% block title %}Campaign Plan — {{ campaign.brief.name if campaign else '' }}{% endblock %}
+
+{% block content %}
+{% include "partials/loading.html" %}
+<div class="tab-panel {{ 'active' if active_tab == 3 else '' }}" id="panel-plan">
+
+  <div style="margin-bottom: 28px;">
+    <h2 style="font-size:22px;font-weight:700;color:var(--navy);margin-bottom:6px;">
+      {% if language == 'zh' %}Campaign Plan{% else %}Campaign Plan{% endif %}
+    </h2>
+    <p style="color:var(--slate);font-size:14px;">
+      {% if language == 'zh' %}
+      AI 将综合分析所有 GEO 诊断结果，生成优先级矩阵、90 天时间线和内容策略。
+      {% else %}
+      AI will analyze all GEO diagnosis results and generate a priority matrix, 90-day timeline, and content strategy.
+      {% endif %}
+    </p>
+  </div>
+
+  {% if not campaign.plan %}
+  <!-- Not yet generated -->
+  <div class="card" style="text-align:center;padding:40px;">
+    <div style="font-size:48px;margin-bottom:12px;">📊</div>
+    <h3 style="color:var(--navy);margin-bottom:8px;">
+      {% if language == 'zh' %}尚未生成 Campaign Plan{% else %}Campaign Plan Not Generated Yet{% endif %}
+    </h3>
+    <p style="color:var(--slate);font-size:14px;margin-bottom:20px;">
+      {% if language == 'zh' %}
+      点击下方按钮，AI 将读取所有诊断文件，分析 ST 在每个问题中的 AI 感知现状、
+      <br>竞品格局，并生成优先级矩阵和执行计划。
+      {% else %}
+      Click below to have AI read all diagnosis files, analyze ST's AI perception per question,
+      <br>map the competitive landscape, and generate a priority matrix with execution plan.
+      {% endif %}
+    </p>
+    <button class="btn btn-primary" onclick="generatePlan()">
+      ⚡ {% if language == 'zh' %}生成 Campaign Plan{% else %}Generate Campaign Plan{% endif %}
+    </button>
+  </div>
+
+  {% else %}
+  <!-- Generated plan shown here (Phase 1f will fill this in) -->
+  <div class="card">
+    <div class="card-header">{% if language == 'zh' %}AI 感知现状总结{% else %}AI Perception Summary{% endif %}</div>
+    <div class="card-body">
+      <p style="font-size:14px;white-space:pre-wrap;">{{ campaign.plan.ai_perception_summary }}</p>
+    </div>
+  </div>
+
+  <div class="export-actions" style="margin-top:20px;">
+    <button class="btn btn-primary" onclick="exportPlan('md')">📄 {% if language == 'zh' %}导出 Markdown{% else %}Export Markdown{% endif %}</button>
+    <button class="btn btn-secondary" onclick="exportPlan('html')">🌐 {% if language == 'zh' %}导出 HTML 报告{% else %}Export HTML Report{% endif %}</button>
+  </div>
+  {% endif %}
+
+</div>
+{% endblock %}
+
+{% block footer_buttons %}
+<button class="btn btn-secondary" onclick="navigateToTab(2)">
+  ← {% if language == 'zh' %}返回 Diagnosis{% else %}Back to Diagnosis{% endif %}
+</button>
+{% if campaign.plan %}
+<button class="btn btn-primary" onclick="exportPlan('md')">
+  ⬇ {% if language == 'zh' %}导出 Markdown{% else %}Export Markdown{% endif %}
+</button>
+{% endif %}
+{% endblock %}
+
+{% block extra_js %}
+<script>
+async function generatePlan() {
+  const loading = document.getElementById('llm-loading');
+  if (loading) loading.style.display = 'flex';
+
+  try {
+    await apiFetch('/api/campaigns/{{ campaign_id }}/plan/generate', { method: 'POST' });
+    window.location.reload();
+  } catch (err) {
+    alert('Generation failed: ' + err.message);
+  } finally {
+    if (loading) loading.style.display = 'none';
+  }
+}
+
+async function exportPlan(format) {
+  window.open('/api/campaigns/{{ campaign_id }}/plan/export/' + format + '?lang={{ language }}', '_blank');
+}
+</script>
+{% endblock %}
