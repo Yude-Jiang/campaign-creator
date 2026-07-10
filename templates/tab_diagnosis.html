@@ -128,44 +128,48 @@ async function handleFileSelect(input, questionId) {
 }
 
 async function uploadFile(file, questionId) {
-  if (!file.name.endsWith('.md') && !file.name.endsWith('.html') && !file.name.endsWith('.htm')) {
-    alert('{% if language == "zh" %}请上传 .md 或 .html 文件{% else %}Please upload .md or .html files{% endif %}');
+  const nameLower = file.name.toLowerCase();
+  if (!nameLower.endsWith('.md') && !nameLower.endsWith('.html') && !nameLower.endsWith('.htm') && !nameLower.endsWith('.txt')) {
+    alert('{% if language == "zh" %}请上传 .md、.html 或 .txt 文件{% else %}Please upload .md, .html, or .txt files{% endif %}');
     return;
   }
 
   const formData = new FormData();
   formData.append('file', file);
 
+  const statusEl = document.getElementById('file-status-' + questionId);
+  if (statusEl) statusEl.innerHTML = '<span style="color:var(--blue);">⏳ {% if language == "zh" %}上传中...{% else %}Uploading...{% endif %}</span>';
+
   try {
-    const resp = await fetch('/api/campaigns/{{ campaign_id }}/diagnosis/upload?question_id=' + questionId, {
+    const resp = await fetch('/api/campaigns/{{ campaign_id }}/diagnosis/upload?question_id=' + encodeURIComponent(questionId), {
       method: 'POST',
       body: formData,
     });
+    if (!resp.ok) {
+      const errData = await resp.json().catch(() => ({ detail: 'HTTP ' + resp.status }));
+      throw new Error(errData.detail || 'Upload failed');
+    }
     const data = await resp.json();
-    if (data.ok) {
-      const statusEl = document.getElementById('file-status-' + questionId);
-      if (statusEl) statusEl.innerHTML = '<span style="color:var(--green);">✅ ' + file.name + '</span>';
-      // Update progress bar
-      const progressBar = document.getElementById('diag-progress-bar');
-      if (progressBar) {
-        const currentWidth = parseFloat(progressBar.style.width) || 0;
-        const step = 100 / {{ recommended }};
-        progressBar.style.width = Math.min(currentWidth + step, 100) + '%';
-        if (parseFloat(progressBar.style.width) >= 100) {
-          progressBar.style.background = 'var(--green)';
-        }
-      }
-      // Enable the footer button if it was disabled
-      const footerBtn = document.querySelector('#panel-diagnosis ~ div .btn-primary, .footer-actions .btn-primary');
-      if (footerBtn && footerBtn.disabled) {
-        footerBtn.disabled = false;
-        // Remove the tooltip if present
-        const tooltip = footerBtn.parentElement.querySelector('span');
-        if (tooltip) tooltip.style.display = 'none';
+    if (statusEl) statusEl.innerHTML = '<span style="color:var(--green);">✅ ' + file.name + '</span>';
+    // Update progress bar
+    const progressBar = document.getElementById('diag-progress-bar');
+    if (progressBar) {
+      const currentWidth = parseFloat(progressBar.style.width) || 0;
+      const step = 100 / {{ recommended }};
+      progressBar.style.width = Math.min(currentWidth + step, 100) + '%';
+      if (parseFloat(progressBar.style.width) >= 100) {
+        progressBar.style.background = 'var(--green)';
       }
     }
+    // Enable the footer button if it was disabled
+    const nextBtn = document.querySelector('.footer-actions .btn-primary, #panel-diagnosis ~ div .btn-primary');
+    if (nextBtn && nextBtn.disabled) {
+      nextBtn.disabled = false;
+      const tip = nextBtn.parentElement.querySelector('span');
+      if (tip) tip.style.display = 'none';
+    }
   } catch (err) {
-    alert('Upload failed: ' + err.message);
+    if (statusEl) statusEl.innerHTML = '<span style="color:var(--red);">❌ ' + err.message + '</span>';
   }
 }
 
