@@ -34,9 +34,9 @@
     </h3>
     <p style="color:var(--slate);font-size:14px;margin-bottom:20px;">
       {% if language == 'zh' %}
-      点击下方按钮，AI 将读取所有诊断文件，分析 {{ brief.name }} 的 AI 感知现状、竞品格局，并生成完整的执行计划。
+      点击下方按钮，AI 将读取所有诊断文件，分析 {{ campaign.brief.name }} 的 AI 感知现状、竞品格局，并生成完整的执行计划。
       {% else %}
-      Click below for AI to read all diagnosis files, analyze ST's AI perception and competitive landscape, then generate a full execution plan.
+      Click below for AI to read all diagnosis files, analyze {{ campaign.brief.name }}'s AI perception and competitive landscape, then generate a full execution plan.
       {% endif %}
     </p>
     <button class="btn btn-primary" onclick="generatePlan()">

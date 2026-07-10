@@ -311,7 +311,7 @@
           <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
             {# ── Simplified display: stars + stage ── #}
             <span style="font-size:12px;font-weight:600;color:var(--navy);white-space:nowrap;"
-                  title="{% if language == 'zh' %}诊断优先级：越高越能发现 {{ brief.name }} 的 AI 品牌召回空白。{% else %}Diagnostic priority: higher = better at detecting {{ brief.name }}'s AI brand recall gaps.{% endif %}">
+                  title="{% if language == 'zh' %}诊断优先级：越高越能发现 {{ campaign.brief.name }} 的 AI 品牌召回空白。{% else %}Diagnostic priority: higher = better at detecting {{ campaign.brief.name }}'s AI brand recall gaps.{% endif %}">
               {{ stars }} <span style="font-weight:400;font-size:10px;color:var(--slate);">{% if language == 'zh' %}诊断{% else %}diag{% endif %}</span>
             </span>
             {% if stage_label %}
