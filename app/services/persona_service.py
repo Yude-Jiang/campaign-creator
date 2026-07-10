@@ -13,6 +13,7 @@ from datetime import datetime
 from pathlib import Path
 
 from app.services.llm_router import llm_router
+from app.utils.json_parser import safe_parse_json
 
 logger = logging.getLogger(__name__)
 
@@ -46,97 +47,6 @@ def _scrub_codes(persona: dict) -> dict:
                 for v in val
             ]
     return persona
-
-
-def _extract_json_block(text: str) -> str:
-    """Extract the first ```json ... ``` block from LLM output."""
-    # Try ```json ... ``` first
-    match = re.search(r"```json\s*([\s\S]*?)\s*```", text)
-    if match:
-        return match.group(1).strip()
-    # Try ``` ... ``` (no language spec)
-    match = re.search(r"```\s*([\s\S]*?)\s*```", text)
-    if match:
-        return match.group(1).strip()
-    # If no code blocks, try to find a JSON object
-    match = re.search(r"\{[\s\S]*\}", text)
-    if match:
-        return match.group(0).strip()
-    return text.strip()
-
-
-def _safe_parse_json(text: str) -> dict:
-    """Try to parse JSON, returning empty dict on failure. Handles truncated output."""
-    try:
-        return json.loads(_extract_json_block(text))
-    except json.JSONDecodeError as e:
-        logger.warning("Failed to parse JSON from LLM output: %s", e)
-        cleaned = _extract_json_block(text)
-        # Remove trailing commas
-        cleaned = re.sub(r",\s*([}\]])", r"\1", cleaned)
-        try:
-            return json.loads(cleaned)
-        except json.JSONDecodeError:
-            pass
-
-        # Try to recover truncated JSON by closing open brackets
-        logger.warning("Attempting truncated JSON recovery...")
-        try:
-            recovered = _close_truncated_json(cleaned)
-            if recovered:
-                return json.loads(recovered)
-        except json.JSONDecodeError:
-            pass
-
-        logger.error("Could not recover JSON from LLM output. Raw: %s", text[:500])
-        return {}
-
-
-def _close_truncated_json(text: str) -> str | None:
-    """Attempt to close truncated JSON by counting brackets and cleaning up.
-
-    Handles several truncation scenarios:
-    1. Clean cut at end of object/array boundary — just add closing brackets.
-    2. Cut mid-field (e.g. '"key": "val') — strip back to last comma, then close.
-    3. Cut mid-string — strip the incomplete string, find last valid comma, close.
-    """
-    # Count open/close brackets and braces
-    open_braces = text.count("{") - text.count("}")
-    open_brackets = text.count("[") - text.count("]")
-    if open_braces <= 0 and open_brackets <= 0:
-        return None
-
-    closing = "]" * open_brackets + "}" * open_braces
-    trimmed = text.rstrip()
-
-    # If already clean cut (ends with , or ] or } or quoted value after comma)
-    if trimmed.endswith((",", "[", "{")):
-        # Strip trailing comma and close
-        if trimmed.endswith(","):
-            trimmed = trimmed[:-1].rstrip()
-        return trimmed + closing
-
-    # If ending with a completed string/object/array, just close
-    if trimmed.endswith(("}", "]", '"')):
-        return trimmed + closing
-
-    # Truncated mid-string or mid-value: find the last valid JSON boundary
-    # Remove everything after the last valid comma or opening bracket
-    last_comma = trimmed.rfind(",")
-    last_brace = trimmed.rfind("{")
-    last_bracket = trimmed.rfind("[")
-
-    cut_point = max(last_comma, last_brace, last_bracket)
-    if cut_point < 0:
-        return None
-
-    # If last char is a comma, keep it; if it's { or [, keep it
-    if cut_point == last_comma:
-        trimmed = trimmed[:cut_point]  # drop the comma
-    elif cut_point in (last_brace, last_bracket):
-        trimmed = trimmed[:cut_point]
-
-    return trimmed + closing
 
 
 def _ensure_persona_defaults(persona: dict) -> dict:
@@ -227,7 +137,7 @@ async def generate_personas_and_questions(
         language=language,
         max_tokens=8192,
     )
-    p1_parsed = _safe_parse_json(p1_result["text"])
+    p1_parsed = safe_parse_json(p1_result["text"])
     personas = p1_parsed.get("personas", [])
     models_used.append(f"personas:{p1_result['model']}")
     if p1_result.get("grounding_used"):
@@ -266,7 +176,7 @@ async def generate_personas_and_questions(
         language=language,
         max_tokens=8192,
     )
-    p2_parsed = _safe_parse_json(p2_result["text"])
+    p2_parsed = safe_parse_json(p2_result["text"])
     value_props = p2_parsed.get("value_propositions", [])
     models_used.append(f"vps:{p2_result['model']}")
 
@@ -295,7 +205,7 @@ async def generate_personas_and_questions(
         language=language,
         max_tokens=8192,
     )
-    p3_parsed = _safe_parse_json(p3_result["text"])
+    p3_parsed = safe_parse_json(p3_result["text"])
     questions = p3_parsed.get("questions", [])
     models_used.append(f"questions:{p3_result['model']}")
     if p3_result.get("grounding_used"):

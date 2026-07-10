@@ -6,40 +6,11 @@ Step 2: Generate full campaign plan from analysis + personas
 
 import json
 import logging
-import re
 
 from app.services.llm_router import llm_router
+from app.utils.json_parser import safe_parse_json
 
 logger = logging.getLogger(__name__)
-
-
-def _extract_json_block(text: str) -> str:
-    """Extract the first ```json ... ``` block from LLM output."""
-    match = re.search(r"```json\s*([\s\S]*?)\s*```", text)
-    if match:
-        return match.group(1).strip()
-    match = re.search(r"```\s*([\s\S]*?)\s*```", text)
-    if match:
-        return match.group(1).strip()
-    match = re.search(r"\{[\s\S]*\}", text)
-    if match:
-        return match.group(0).strip()
-    return text.strip()
-
-
-def _safe_parse_json(text: str) -> dict:
-    """Try to parse JSON, returning empty dict on failure."""
-    try:
-        return json.loads(_extract_json_block(text))
-    except json.JSONDecodeError as e:
-        logger.warning("Failed to parse JSON: %s", e)
-        cleaned = _extract_json_block(text)
-        cleaned = re.sub(r",\s*([}\]])", r"\1", cleaned)
-        try:
-            return json.loads(cleaned)
-        except json.JSONDecodeError:
-            logger.error("Could not recover JSON. Raw: %s", text[:500])
-            return {}
 
 
 async def generate_campaign_plan(
@@ -101,7 +72,7 @@ async def generate_campaign_plan(
         logger.error("Step 1 (diagnosis analysis) failed: %s", e)
         raise RuntimeError(f"Diagnosis analysis failed: {e}") from e
 
-    analysis_json = _safe_parse_json(analysis_result["text"])
+    analysis_json = safe_parse_json(analysis_result["text"])
     if not analysis_json:
         logger.warning("Step 1 returned empty analysis — plan will be based on raw data only")
 
@@ -126,7 +97,7 @@ async def generate_campaign_plan(
         logger.error("Step 2 (plan generation) failed: %s", e)
         raise RuntimeError(f"Campaign plan generation failed: {e}") from e
 
-    plan_json = _safe_parse_json(plan_result["text"])
+    plan_json = safe_parse_json(plan_result["text"])
     logger.info("Plan generation complete (model: %s)", plan_result["model"])
 
     # ── Handle different output structures from different models ──

@@ -67,7 +67,7 @@ class ParseBriefRequest(BaseModel):
 async def parse_brief(req: ParseBriefRequest):
     """Parse a natural-language campaign brief into structured fields using AI."""
     from app.services.llm_router import llm_router
-    from app.services.persona_service import _safe_parse_json
+    from app.utils.json_parser import safe_parse_json
 
     result = await llm_router.route_and_generate(
         task="vp_generation",  # Use DeepSeek for fast, cost-effective parsing
@@ -76,7 +76,7 @@ async def parse_brief(req: ParseBriefRequest):
         language=req.language,
         max_tokens=1024,
     )
-    parsed = _safe_parse_json(result["text"])
+    parsed = safe_parse_json(result["text"])
     return parsed
 
 
