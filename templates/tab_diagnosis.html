@@ -17,7 +17,7 @@
     </p>
   </div>
 
-  <!-- Steps — 2×2 grid with numbered circles -->
+  <!-- Steps -->
   <div class="card" style="margin-bottom:20px;padding:16px 20px;">
     <div style="font-size:13px;font-weight:700;color:var(--navy);margin-bottom:12px;">
       📋 {% if language == 'zh' %}操作步骤{% else %}Steps{% endif %}
@@ -26,7 +26,7 @@
       <div style="display:flex;align-items:center;gap:8px;font-size:13px;">
         <span style="display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:50%;background:var(--blue);color:#fff;font-size:11px;font-weight:700;flex-shrink:0;">1</span>
         {% if language == 'zh' %}打开{% else %}Open{% endif %}
-        <a href="{{ geo_hub_url }}" target="_blank" rel="noopener" style="font-weight:600;">GEO-hub-experimental ↗</a>
+        <a href="{{ geo_hub_url }}" target="_blank" rel="noopener" style="font-weight:600;">GEO-hub-experimental &#x2197;</a>
       </div>
       <div style="display:flex;align-items:center;gap:8px;font-size:13px;">
         <span style="display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:50%;background:var(--blue);color:#fff;font-size:11px;font-weight:700;flex-shrink:0;">2</span>
@@ -75,32 +75,27 @@
   {% else %}
   {% for q in campaign.questions %}
   <div class="card" style="margin-bottom:10px;" id="q-{{ q.id }}">
-    {# Question text row #}
     <div style="padding:10px 16px;display:flex;align-items:flex-start;gap:10px;border-bottom:1px solid var(--line);">
       <span style="font-weight:700;color:var(--blue);font-size:13px;white-space:nowrap;padding-top:1px;">
-        {{ q.id }}{% if q.diagnostic_value == 'high' %} <span style="color:var(--gold);" title="{% if language == 'zh' %}优先诊断{% else %}Priority{% endif %}">★</span>{% endif %}
+        {{ q.id }}{% if q.diagnostic_value == 'high' %} <span style="color:var(--gold);" title="{% if language == 'zh' %}优先诊断{% else %}Priority{% endif %}">&#x2605;</span>{% endif %}
       </span>
       <span style="font-size:13px;flex:1;line-height:1.5;">{{ q.text }}</span>
     </div>
-    {# Upload row #}
     <div style="padding:10px 16px 10px 42px;">
       <div class="drop-zone" style="padding:14px;text-align:center;"
            ondragover="event.preventDefault();this.classList.add('dragover')"
            ondragleave="this.classList.remove('dragover')"
-           ondrop="handleDrop(event, '{{ q.id }}')">
-        <input type="file" accept=".md,.html,.htm,.txt" style="display:none;"
-               id="file-input-{{ q.id }}"
-              >
+           ondrop="(function(e){e.preventDefault();this.classList.remove('dragover');if(e.dataTransfer.files[0])uploadFile(e.dataTransfer.files[0],'{{ q.id }}')}).call(this,event)">
         <div id="file-status-{{ q.id }}" style="font-size:12px;min-height:18px;">
           {% set diag = campaign.diagnoses | selectattr('question_id', 'equalto', q.id) | list | first %}
           {% if diag %}
-          <span style="color:var(--green);font-weight:500;">✅ {{ diag.filename }}</span>
+          <span style="color:var(--green);font-weight:500;">&#x2705; {{ diag.filename }}</span>
           <span style="color:var(--slate);font-size:10px;display:block;">{{ diag.uploaded_at[:16] }}</span>
           {% else %}
           <span style="color:var(--slate);">
             {% if language == 'zh' %}拖拽文件到此处，或{% else %}Drag file here, or{% endif %}
             <button class="btn btn-secondary" style="font-size:11px;padding:3px 12px;margin-left:6px;"
-                    onclick="document.getElementById('file-input-{{ q.id }}').click()">
+                    onclick="pickAndUpload('{{ q.id }}')">
               {% if language == 'zh' %}浏览文件{% else %}Browse{% endif %}
             </button>
           </span>
@@ -117,7 +112,7 @@
 
 {% block footer_buttons %}
 <button class="btn btn-secondary" onclick="navigateToTab(1)">
-  ← {% if language == 'zh' %}返回 Persona{% else %}Back to Persona{% endif %}
+  &#x2190; {% if language == 'zh' %}返回 Persona{% else %}Back to Persona{% endif %}
 </button>
 {% set diag_count_footer = campaign.diagnoses|length if campaign.diagnoses else 0 %}
 {% set q_count_footer = campaign.questions|length if campaign.questions else 0 %}
@@ -128,33 +123,27 @@
 {% endif %}
 <button class="btn btn-primary" onclick="navigateToTab(3)"
         {{ 'disabled' if diag_count_footer == 0 or q_count_footer == 0 else '' }}>
-  {% if language == 'zh' %}分析诊断 → 生成 Plan{% else %}Analyze → Generate Plan{% endif %}
+  {% if language == 'zh' %}分析诊断 &#x2192; 生成 Plan{% else %}Analyze &#x2192; Generate Plan{% endif %}
 </button>
 {% endblock %}
 
 {% block extra_js %}
 <script>
-// Attach change listeners to all file inputs (more reliable than inline onchange)
-document.querySelectorAll('input[type="file"][id^="file-input-"]').forEach(function(input) {
-  input.addEventListener('change', function() {
-    const qid = this.id.replace('file-input-', '');
-    const file = this.files[0];
-    if (file) {
-      uploadFile(file, qid);
-      // Reset so the same file can be selected again
-      this.value = '';
+// ── Pick a file and upload for a given question ──
+function pickAndUpload(qid) {
+  var input = document.createElement('input');
+  input.type = 'file';
+  input.accept = '.md,.html,.htm,.txt';
+  input.onchange = function() {
+    if (this.files && this.files[0]) {
+      uploadFile(this.files[0], qid);
     }
-  });
-});
-
-async function handleDrop(e, questionId) {
-  e.preventDefault();
-  e.currentTarget.classList.remove('dragover');
-  const file = e.dataTransfer.files[0];
-  if (file) await uploadFile(file, questionId);
+  };
+  input.click();
 }
 
-async function uploadFile(file, questionId) {
+// ── Upload file to server ──
+async function uploadFile(file, qid) {
   var nameLower = file.name.toLowerCase();
   if (!nameLower.endsWith('.md') && !nameLower.endsWith('.html') && !nameLower.endsWith('.htm') && !nameLower.endsWith('.txt')) {
     alert('{% if language == "zh" %}请上传 .md、.html 或 .txt 文件{% else %}Please upload .md, .html, or .txt files{% endif %}');
@@ -164,11 +153,11 @@ async function uploadFile(file, questionId) {
   var formData = new FormData();
   formData.append('file', file);
 
-  var statusEl = document.getElementById('file-status-' + questionId);
-  if (statusEl) statusEl.innerHTML = '<span style="color:var(--blue);">⏳ {% if language == "zh" %}上传中...{% else %}Uploading...{% endif %}</span>';
+  var statusEl = document.getElementById('file-status-' + qid);
+  if (statusEl) statusEl.innerHTML = '<span style="color:var(--blue);">&#x23F3; {% if language == "zh" %}上传中...{% else %}Uploading...{% endif %}</span>';
 
   try {
-    var resp = await fetch('/api/campaigns/{{ campaign_id }}/diagnosis/upload?question_id=' + encodeURIComponent(questionId), {
+    var resp = await fetch('/api/campaigns/{{ campaign_id }}/diagnosis/upload?question_id=' + encodeURIComponent(qid), {
       method: 'POST',
       body: formData,
     });
@@ -178,7 +167,7 @@ async function uploadFile(file, questionId) {
     }
     var data = await resp.json();
     if (statusEl) {
-      statusEl.innerHTML = '<span style="color:var(--green);font-weight:500;">✅ ' + file.name + '</span>'
+      statusEl.innerHTML = '<span style="color:var(--green);font-weight:500;">&#x2705; ' + file.name + '</span>'
         + '<span style="color:var(--slate);font-size:10px;display:block;">' + new Date().toISOString().slice(0, 16) + '</span>';
     }
     // Update progress bar
@@ -199,7 +188,7 @@ async function uploadFile(file, questionId) {
       if (tip) tip.style.display = 'none';
     }
   } catch (err) {
-    if (statusEl) statusEl.innerHTML = '<span style="color:var(--red);">❌ ' + err.message + '</span>';
+    if (statusEl) statusEl.innerHTML = '<span style="color:var(--red);">&#x274C; ' + err.message + '</span>';
   }
 }
 </script>
