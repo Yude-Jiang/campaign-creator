@@ -24,7 +24,7 @@ You are a technical SEO and content strategy expert, specializing in generating 
 
 {% for p in personas %}
 ### {{ p.name }} ({{ p.id }})
-- **Tier**: {{ p.layer }} | **Tech Depth**: {{ p.tech_depth }} | **Decision Weight**: {{ p.decision_weight }}
+- **Tier**: {{ p.layer }} | **Tech Depth**: {{ p.tech_depth }} | **Decision Weight**: {{ p.decision_weight }}{% if p.funnel_stage %} | **Funnel Stage**: {{ p.funnel_stage }}{% endif %}
 - **Search Queries**: {{ p.search_queries | join(', ') if p.search_queries else 'Not provided' }}
 - **Pain Points**: {{ p.pain_points | join('; ') }}
 - **Objections**: {{ p.objections | join('; ') if p.objections else 'Not provided' }}
@@ -96,6 +96,7 @@ Each question needs rich metadata for downstream diagnosis:
       "category": "category_awareness | selection | implementation | cost",
       "target_persona_ids": ["prac_sys_architect", "dm_procurement"],
       "diagnostic_value": "high | medium | low",
+      "funnel_stage": "why | what | how",
       "assumed_platform": "Reddit | Stack Overflow | LinkedIn | Quora | EETimes | YouTube",
       "assumed_heat": "High | Medium | Low",
       "search_intent": "informational | comparison | transactional",
@@ -114,4 +115,5 @@ Each question needs rich metadata for downstream diagnosis:
 - Each category meets its minimum count
 - Each persona targeted by at least 2 questions
 - `diagnostic_value` distribution: ~40% high, 40% medium, 20% low
+- `funnel_stage` must align with the target persona's funnel stage (why/what/how)
 - `related_questions`: optional, at most 2 per question

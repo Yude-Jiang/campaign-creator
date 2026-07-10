@@ -129,7 +129,7 @@ class LLMRouter:
 
         Args:
             task: Task key from TASK_ROUTING (e.g. "persona_discovery")
-            prompt_name: Template filename (e.g. "persona_vp_questions.md")
+            prompt_name: Template filename (e.g. "persona_discovery.md")
             variables: Jinja2 template variables
             language: "zh" or "en" — selects the prompt subdirectory
             model_override: Force a specific model (bypasses routing)

@@ -24,7 +24,7 @@
 
 {% for p in personas %}
 ### {{ p.name }} ({{ p.id }})
-- **层级**: {{ p.layer }} | **技术深度**: {{ p.tech_depth }} | **决策权重**: {{ p.decision_weight }}
+- **层级**: {{ p.layer }} | **技术深度**: {{ p.tech_depth }} | **决策权重**: {{ p.decision_weight }}{% if p.funnel_stage %} | **漏斗阶段**: {{ p.funnel_stage }}{% endif %}
 - **搜索词**: {{ p.search_queries | join(', ') if p.search_queries else '未提供' }}
 - **痛点**: {{ p.pain_points | join('; ') }}
 - **反对理由**: {{ p.objections | join('; ') if p.objections else '未提供' }}
@@ -96,6 +96,7 @@
       "category": "category_awareness | selection | implementation | cost",
       "target_persona_ids": ["prac_sys_architect", "dm_procurement"],
       "diagnostic_value": "high | medium | low",
+      "funnel_stage": "why | what | how",
       "assumed_platform": "知乎 | CSDN | 电子发烧友 | 百度知道 | 微信搜一搜",
       "assumed_heat": "高 | 中 | 低",
       "search_intent": "informational | comparison | transactional",
@@ -114,4 +115,5 @@
 - 四个分类每类至少符合最少数量要求
 - 每个 Persona 至少被 2 个问题覆盖
 - `diagnostic_value` 分布：约 40% high、40% medium、20% low
+- `funnel_stage` 必须与该问题所覆盖的 Persona 的漏斗阶段对齐（why/what/how）
 - `related_questions` 可选，每个最多 2 条
