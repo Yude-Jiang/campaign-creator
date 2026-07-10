@@ -43,9 +43,9 @@ Each email contains:
 
 ### Sequence Logic
 
-1. **Email 1 · Build Awareness**: Share an industry insight or technology trend, introducing ST's presence in this space. CTA: Read full analysis / blog post
-2. **Email 2 · Deepen Trust**: Provide specific technical detail or comparison analysis, demonstrating ST's differentiated value. CTA: Download whitepaper / view comparison details
-3. **Email 3 · Drive Action**: Offer practical resources (SDK, reference design, webinar), lowering the barrier to try. CTA: Get development resources / register for webinar
+1. **Email 1 · Build Awareness**: Share an industry insight or technology trend, introducing ST's presence in this space. CTA: use a real resource from content_brief (blog link / analysis article); if none, fall back to "Learn more"
+2. **Email 2 · Deepen Trust**: Provide specific technical detail or comparison analysis, demonstrating ST's differentiated value. CTA: use a real resource from content_brief (whitepaper / comparison doc); if none, fall back to "Contact us for detailed information"
+3. **Email 3 · Drive Action**: Offer practical resources (SDK, reference design, webinar), lowering the barrier to try. CTA: use a real resource from content_brief (dev resource / event link); if none, fall back to "Contact ST technical support"
 
 ## Output Format
 
