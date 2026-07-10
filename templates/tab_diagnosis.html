@@ -61,7 +61,7 @@
     <span style="font-size:11px;color:var(--slate);">{{ q_total }} {% if language == 'zh' %}个问题{% else %}questions{% endif %}</span>
   </div>
   <div style="background:var(--line);border-radius:10px;height:6px;margin-bottom:22px;">
-    <div id="diag-progress-bar" style="background:{{ 'var(--green)' if diag_count >= recommended else 'var(--blue)' }};height:100%;border-radius:10px;
+    <div id="diag-progress-bar" data-recommended="{{ recommended }}" data-diag-count="{{ diag_count }}" style="background:{{ 'var(--green)' if diag_count >= recommended else 'var(--blue)' }};height:100%;border-radius:10px;
          width:{{ (diag_count / recommended * 100) if recommended > 0 else 0 }}%;max-width:100%;transition:width 0.3s;">
     </div>
   </div>
@@ -161,22 +161,26 @@ async function uploadFile(file, qid) {
       method: 'POST',
       body: formData,
     });
-    if (!resp.ok) {
-      var errData = await resp.json().catch(function() { return { detail: 'HTTP ' + resp.status }; });
-      throw new Error(errData.detail || 'Upload failed');
+    var data = await resp.json().catch(function() { return null; });
+    if (!resp.ok || !data || !data.ok) {
+      if (statusEl) {
+        var errMsg = (data && data.detail) || ('HTTP ' + resp.status);
+        statusEl.innerHTML = '<span style="color:var(--red);">&#x274C; ' + errMsg + '</span>';
+      }
+      return;
     }
-    var data = await resp.json();
     if (statusEl) {
       statusEl.innerHTML = '<span style="color:var(--green);font-weight:500;">&#x2705; ' + file.name + '</span>'
         + '<span style="color:var(--slate);font-size:10px;display:block;">' + new Date().toISOString().slice(0, 16) + '</span>';
     }
-    // Update progress bar
+    // Update progress bar — read recommended from DOM data attribute (NOT Jinja2)
     var progressBar = document.getElementById('diag-progress-bar');
     if (progressBar) {
-      var currentWidth = parseFloat(progressBar.style.width) || 0;
-      var step = 100 / {{ recommended }};
-      progressBar.style.width = Math.min(currentWidth + step, 100) + '%';
-      if (parseFloat(progressBar.style.width) >= 100) {
+      var recommended = parseInt(progressBar.dataset.recommended || '7', 10);
+      var currentCount = parseInt(progressBar.dataset.diagCount || '0', 10) + 1;
+      progressBar.dataset.diagCount = currentCount;
+      progressBar.style.width = Math.min(currentCount / recommended * 100, 100) + '%';
+      if (currentCount >= recommended) {
         progressBar.style.background = 'var(--green)';
       }
     }
