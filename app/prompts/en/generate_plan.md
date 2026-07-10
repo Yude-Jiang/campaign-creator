@@ -59,8 +59,8 @@ Each competitor entry format:
 
 Generate a "battle card" for each question:
 
-- **P0 issues** (3-5): Complete battle cards with detailed content_plan
-- **P1 issues** (2-4): Complete battle cards with content_plan
+- **P0 issues** (3-5): Complete battle cards, at least 4 content_plan items covering ≥3 channels each
+- **P1 issues** (2-4): Complete battle cards, at least 3 content_plan items covering ≥3 channels each
 - **P2 issues**: Basic fields only (question_id, question_text, priority, scores) — content_plan can be empty array
 
 Each battle card JSON format:
@@ -82,19 +82,20 @@ Each battle card JSON format:
       "channel_type": "organic | paid",
       "target_persona_id": "prac_architect",
       "title_suggestion": "Article/content title suggestion (under 15 words)",
-      "content_brief": "Content editing guidance (80-150 words), containing core argument, must-cover differentiation points, target question text — NOT a standalone prompt. The downstream content generator will combine this with the format-specific template into a complete prompt"
+      "content_brief": "Content editing guidance (100-200 words), must include: ① specific competitor/perception gap (extracted from diagnosis) ② ST's specific differentiator (chip feature or solution advantage, not generic 'better performance') ③ target benchmark question text ④ suggested argument angle (e.g., cost comparison/architecture evolution/safety certification). This is editorial guidance for the downstream generator — it will be combined with the channel-specific format template into a complete prompt."
     }
   ]
 }
 ```
 
 **content_plan design principles**:
-- Each P0/P1 issue should have at least 2-3 content_plan entries covering different channels and formats
+- **Channel diversity requirement**: Each P0 issue must have at least 4 content_plan entries, each P1 at least 3. Entries must cover at least 3 different channels — never concentrate all entries on 1-2 channels
+- **Organic + Paid mix**: Each P0 issue should include at least 1 organic channel and consider 1 paid channel
 - Ensure each target persona is covered by at least 1 content item
 - channel_type must be "organic" or "paid"
 - When multiple personas share the same pain theme, plan a reusable content line (one core asset adapted per persona tier for depth/channel), noting reuse in each content_brief to avoid duplicate production
 - format must use one of the enumerated values above — do not invent new ones
-- content_brief is content editing guidance (core argument + differentiation points + target question) — downstream combines with format template
+- **content_brief quality**: Must include specific competitor names, ST's specific chip/solution differentiators (not vague "better performance"), specific AI perception gaps found in diagnosis, and a suggested argument angle. This is editorial guidance for the downstream generator, not a full prompt.
 
 ### 4. 90-Day Timeline (timeline_90days)
 

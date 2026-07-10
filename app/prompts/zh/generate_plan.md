@@ -63,8 +63,8 @@
 
 对每个问题生成一张"战斗卡"：
 
-- **P0 问题**（3-5个）：完整的战斗卡，包含详细 content_plan
-- **P1 问题**（2-4个）：完整的战斗卡，包含 content_plan
+- **P0 问题**（3-5个）：完整的战斗卡，每个至少 4 条 content_plan 覆盖 ≥3 个渠道
+- **P1 问题**（2-4个）：完整的战斗卡，每个至少 3 条 content_plan 覆盖 ≥3 个渠道
 - **P2 问题**：仅需基本字段（question_id, question_text, priority, scores），content_plan 可留空数组
 
 每个战斗卡的 JSON 格式：
@@ -81,24 +81,25 @@
   "gap_type": "open_gap | rival_owned | not_linked | buried_in_pdf",
   "content_plan": [
     {
-      "format": "zhihu_long_form_article | csdn_technical_blog | zhihu_qa_answer | baidu_search_ad | baidu_feed_ad",
+      "format": "zhihu_long_form_article | csdn_technical_blog | zhihu_qa_answer | baidu_search_ad | baidu_feed_ad | bilibili_video_script | wechat_article | email_nurture_series",
       "channel": "知乎 | CSDN | B站 | 微信 | 邮件 | 百度竞价 | 百度信息流",
       "channel_type": "organic | paid",
       "target_persona_id": "prac_engineer",
       "title_suggestion": "中文内容标题建议（30字以内）",
-      "content_brief": "内容编辑指引（中文，80-150字），包含核心论点、必须覆盖的差异化点、目标问题原文——而非独立 prompt。下游内容生成模块将以此 + 对应格式模板组合为完整 prompt"
+      "content_brief": "内容编辑指引（120-200字），必须包含：① 针对的具体竞品/认知空白（从 diagnosis 分析中提取）② ST 的差异化技术论点（具体到芯片特性或方案优势，不只写'性能更强'）③ 目标 benchmark question 原文 ④ 建议的论证角度（如: 成本对比/架构演进/功能安全）。注意：这不是一个独立的 prompt，而是给下游内容生成模块的编辑指引——下游会用此指引 + 对应渠道的格式模板组合为完整 prompt。"
     }
   ]
 }
 ```
 
 **content_plan 设计原则**：
-- 每个 P0/P1 问题至少 2-3 个 content_plan 条目，覆盖不同渠道和格式
+- **渠道多样性硬性要求**：每个 P0 问题至少 4 个 content_plan 条目，每个 P1 问题至少 3 个。条目必须覆盖至少 3 种不同的 channel（如知乎 + CSDN + B站 或 知乎 + 微信 + 邮件），禁止所有条目集中在 1-2 个渠道
+- **有机 + 付费搭配**：每个 P0 问题至少包含 1 条有机渠道（知乎/CSDN/B站/微信）和考虑 1 条付费渠道（百度竞价/百度信息流）的建议
 - 确保每个 target Persona 至少被 1 个内容条目覆盖
 - channel_type 标注为 "organic"（有机渠道）或 "paid"（付费渠道）
 - 多个 Persona 共享同一痛点主题时，优先规划一条跨 persona 复用的内容线（一份核心素材 + 按 persona 层级适配深度/渠道），在各自条目的 content_brief 中注明复用关系，避免同一主题重复生产
 - format 使用上述枚举值之一，不要自由发挥
-- content_brief 是内容编辑指引（核心论点 + 差异化点 + 目标问题），下游会根据格式模板组合完整 prompt
+- **content_brief 质量要求**：必须包含具体竞品名称、ST 具体芯片/方案特性（不要泛泛写"性能更强"或"集成度更高"）、诊断中发现的 AI 认知空白、以及建议的论证角度。这是下游生成模块的编辑指引而非完整 prompt。
 
 ### 4. 90 天时间线 (timeline_90days)
 
@@ -182,7 +183,23 @@
           "channel_type": "organic",
           "target_persona_id": "prac_engineer",
           "title_suggestion": "完整的中文标题建议",
-          "content_brief": "内容编辑指引：核心论点、差异化点、目标问题原文"
+          "content_brief": "针对 [竞品X] 在 [认知空白] 的主导地位，论证 ST [具体芯片] 的 [差异化特性] 如何解决 [具体痛点]。诊断发现 AI 在回答 [问题原文] 时完全未提及 ST。建议以 [角度，如成本对比/架构演进] 为主线。"
+        },
+        {
+          "format": "csdn_technical_blog",
+          "channel": "CSDN",
+          "channel_type": "organic",
+          "target_persona_id": "prac_engineer",
+          "title_suggestion": "含代码示例的技术实现标题",
+          "content_brief": "从实战角度展示 ST [具体芯片] 在 [应用场景] 的集成方法。必须包含 SDK/工具链的实操细节。针对诊断中发现的 [具体空白/误解]，用可复现的技术验证来纠正 AI 的错误认知。"
+        },
+        {
+          "format": "bilibili_video_script",
+          "channel": "B站",
+          "channel_type": "organic",
+          "target_persona_id": "prac_engineer",
+          "title_suggestion": "适合视频传播的技术科普标题",
+          "content_brief": "将知乎/CSDN 长文的核心论点转化为 8-15 分钟视频脚本。受众为 [persona]，偏好可视化技术解析。核心信息必须与文字版保持一致（跨渠道语义对齐），但表达方式更适合视频——用架构动画/对比表格/实测片段代替纯文字论证。"
         }
       ]
     }
