@@ -126,7 +126,23 @@ async def upload_diagnosis(campaign_id: str, file: UploadFile = File(...), quest
     if not data:
         raise HTTPException(status_code=404, detail="Campaign not found")
 
+    # ── Server-side validation ──
+    fname = (file.filename or "").lower()
+    allowed_exts = (".md", ".html", ".htm")
+    if not any(fname.endswith(ext) for ext in allowed_exts):
+        raise HTTPException(
+            status_code=400,
+            detail="不支持的文件类型，仅接受 .md / .html / .htm | Unsupported file type — only .md / .html / .htm accepted",
+        )
+
     content = await file.read()
+    max_bytes = 5 * 1024 * 1024  # 5 MB
+    if len(content) > max_bytes:
+        raise HTTPException(
+            status_code=413,
+            detail=f"文件过大（{len(content) / 1024 / 1024:.1f} MB），上限 5 MB | File too large ({len(content) / 1024 / 1024:.1f} MB), limit 5 MB",
+        )
+
     saved_path = save_diagnosis_file(campaign_id, question_id, content, file.filename or f"{question_id}.md")
 
     # Update campaign diagnoses list
