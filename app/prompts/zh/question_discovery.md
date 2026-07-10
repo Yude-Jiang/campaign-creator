@@ -64,7 +64,7 @@
 2. **难度层级** (`difficulty_level`): beginner / intermediate / advanced
 3. **搜索量估算** (`assumed_search_volume`): 高 / 中 / 低（假设值）
 4. **季节性或时效性** (`seasonality`): evergreen / trending / seasonal
-   **关联问题** (`related_questions`): 可选，1-2 个相关的 follow-up 问题
+5. **关联问题** (`related_questions`): **必填**，1-2 个相关的 follow-up 问题，每条问题至少 1 个
 
 ### 高质量 vs 低质量问题示例
 
@@ -116,4 +116,4 @@
 - 每个 Persona 至少被 2 个问题覆盖
 - `diagnostic_value` 分布：约 40% high、40% medium、20% low
 - `funnel_stage` 必须与该问题所覆盖的 Persona 的漏斗阶段对齐（why/what/how）
-- `related_questions` 可选，每个最多 2 条
+- `related_questions` 必填，每条问题 1-2 条

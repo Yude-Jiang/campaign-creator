@@ -64,7 +64,7 @@ Each question needs rich metadata for downstream diagnosis:
 2. **Difficulty Level** (`difficulty_level`): beginner / intermediate / advanced
 3. **Search Volume Estimate** (`assumed_search_volume`): High / Medium / Low (assumed)
 4. **Seasonality** (`seasonality`): evergreen / trending / seasonal
-   **Related Questions** (`related_questions`): optional, 1-2 follow-up questions
+5. **Related Questions** (`related_questions`): **required**, 1-2 follow-up questions, at least 1 per question
 
 ### Quality Examples
 
@@ -116,4 +116,4 @@ Each question needs rich metadata for downstream diagnosis:
 - Each persona targeted by at least 2 questions
 - `diagnostic_value` distribution: ~40% high, 40% medium, 20% low
 - `funnel_stage` must align with the target persona's funnel stage (why/what/how)
-- `related_questions`: optional, at most 2 per question
+- `related_questions`: required, 1-2 per question

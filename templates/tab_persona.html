@@ -280,9 +280,9 @@
 
     <div id="questions-container">
       {# Sort by diagnostic_value: high → medium → low #}
-      {% set high_qs = campaign.questions | selectattr('diagnostic_value', 'equalto', 'high') | list %}
-      {% set medium_qs = campaign.questions | selectattr('diagnostic_value', 'equalto', 'medium') | list %}
-      {% set low_qs = campaign.questions | selectattr('diagnostic_value', 'equalto', 'low') | list %}
+      {% set high_qs = campaign.questions | selectattr('diagnostic_value', 'equalto', 'high') | sort(attribute='id') | list %}
+      {% set medium_qs = campaign.questions | selectattr('diagnostic_value', 'equalto', 'medium') | sort(attribute='id') | list %}
+      {% set low_qs = campaign.questions | selectattr('diagnostic_value', 'equalto', 'low') | sort(attribute='id') | list %}
       {% set sorted_questions = high_qs + medium_qs + low_qs %}
       {% for q in sorted_questions %}
       {% set is_baseline_frozen = campaign.questions_frozen_at and not q.added_after_baseline %}
