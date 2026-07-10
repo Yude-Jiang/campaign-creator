@@ -310,22 +310,6 @@
             {% if stage_label %}
             <span style="font-size:11px;background:var(--navy);color:#fff;padding:2px 8px;border-radius:8px;white-space:nowrap;">{{ stage_label }}</span>
             {% endif %}
-            {# ── Edit controls (kept for power users) ── #}
-            <select class="form-control form-control-sm" data-field="category" data-question-id="{{ q.id }}"
-                    onchange="scheduleSave()" style="font-size:10px;width:auto;opacity:0.6;"
-                    {{ 'disabled' if is_baseline_frozen }}>
-              <option value="category_awareness" {{ 'selected' if q.category == 'category_awareness' }}>{% if language == 'zh' %}入门{% else %}Aware{% endif %}</option>
-              <option value="selection" {{ 'selected' if q.category == 'selection' }}>{% if language == 'zh' %}选型{% else %}Select{% endif %}</option>
-              <option value="implementation" {{ 'selected' if q.category == 'implementation' }}>{% if language == 'zh' %}实施{% else %}Impl{% endif %}</option>
-              <option value="cost" {{ 'selected' if q.category == 'cost' }}>{% if language == 'zh' %}成本{% else %}Cost{% endif %}</option>
-            </select>
-            <select class="form-control form-control-sm" data-field="diagnostic_value" data-question-id="{{ q.id }}"
-                    onchange="scheduleSave()" style="font-size:10px;width:auto;opacity:0.6;"
-                    {{ 'disabled' if is_baseline_frozen }}>
-              <option value="high" {{ 'selected' if q.diagnostic_value == 'high' }}>High ★</option>
-              <option value="medium" {{ 'selected' if q.diagnostic_value == 'medium' }}>Medium</option>
-              <option value="low" {{ 'selected' if q.diagnostic_value == 'low' }}>Low</option>
-            </select>
           </div>
           {% if q.related_questions %}
           <div style="font-size:10px;color:var(--slate);margin-top:4px;">
@@ -552,19 +536,6 @@ function addQuestion() {
         <span style="font-size:12px;font-weight:600;color:var(--navy);white-space:nowrap;">
           ★★ <span style="font-weight:400;font-size:10px;color:var(--slate);">{{ '诊断' if language == 'zh' else 'diag' }}</span>
         </span>
-        <select class="form-control form-control-sm" data-field="category" data-question-id="${newId}"
-                onchange="scheduleSave()" style="font-size:10px;width:auto;opacity:0.6;">
-          <option value="category_awareness">{{ '入门' if language == 'zh' else 'Aware' }}</option>
-          <option value="selection">{{ '选型' if language == 'zh' else 'Select' }}</option>
-          <option value="implementation">{{ '实施' if language == 'zh' else 'Impl' }}</option>
-          <option value="cost">{{ '成本' if language == 'zh' else 'Cost' }}</option>
-        </select>
-        <select class="form-control form-control-sm" data-field="diagnostic_value" data-question-id="${newId}"
-                onchange="scheduleSave()" style="font-size:10px;width:auto;opacity:0.6;">
-          <option value="high">High ★</option>
-          <option value="medium" selected>Medium</option>
-          <option value="low">Low</option>
-        </select>
       </div>
     </div>
     <button class="btn btn-secondary" style="font-size:11px;padding:4px 8px;color:var(--red);flex-shrink:0;"
