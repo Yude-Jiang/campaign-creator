@@ -3,6 +3,20 @@
 import json
 from datetime import datetime
 
+# Fields that must NEVER appear in user-facing exports.
+# anchor = internal master-persona mapping code; basis = research provenance label.
+_PERSONA_EXCLUDE_KEYS = {"anchor", "basis"}
+
+
+def _scrub_persona_for_export(persona: dict) -> dict:
+    """Return a copy of the persona dict with internal-only keys removed."""
+    return {k: v for k, v in persona.items() if k not in _PERSONA_EXCLUDE_KEYS}
+
+
+def _scrub_personas_for_export(personas: list[dict]) -> list[dict]:
+    """Return a list of personas with internal-only keys removed."""
+    return [_scrub_persona_for_export(p) for p in personas]
+
 
 def _format_timeline(timeline: list[dict]) -> str:
     """Render timeline phases as markdown."""

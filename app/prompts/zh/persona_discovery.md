@@ -19,6 +19,26 @@
 - **已知竞品**: {{ brief.competitors_known | join(', ') or '未指定' }}
 - **补充说明**: {{ brief.notes or '无' }}
 
+{% if master_personas %}
+## 受众骨架（内部约束，代号制）
+
+以下是若干已验证的受众骨架。生成 campaign persona 时：
+
+1. 每个 persona 必须在 `anchor` 字段填写它实例化自哪个骨架的代号（如 "m01"）。
+2. 继承该骨架的 decision_role、funnel_stage、渠道偏好作为硬约束，在此基础上按 campaign 主题特化 name、pain_points、search_queries、daily_tasks。
+3. **代号（m01/m02/m03）绝对不得出现在 name、pain_points、value_proposition 或任何其他文本字段中**——它仅用于 anchor 字段。
+4. 骨架未覆盖的受众类型（如学生/KOL 等 influencer）可自由生成，anchor 留空。
+
+{% for mp in master_personas %}
+### 骨架 {{ mp.code }} · {{ mp.label }}
+- 决策角色: {{ mp.decision_role }} / 漏斗层: {{ mp.funnel_stage }} / 把守问题: {{ mp.gate_question }}
+- 决策权重: 发起={{ mp.decision_weight.initiates }}, 拍板={{ mp.decision_weight.final_authority }}, 对下一环节影响={{ mp.decision_weight.influence_on_next_stage }}
+- 痛点主题: {% for pt in mp.pain_point_themes %}{{ pt.theme }}（{{ pt.essence }}）{% if not loop.last %}; {% endif %}{% endfor %}
+- 偏好渠道: {{ mp.channel_map[region].preferred | join(', ') }}
+- 回避渠道: {{ mp.channel_map[region].avoid | join(', ') }}
+{% endfor %}
+{% endif %}
+
 ---
 
 ## 任务：深度 Persona 挖掘
@@ -107,6 +127,11 @@
       "layer": "decision_maker | practitioner | influencer",
       "tech_depth": "deep | moderate | shallow",
       "decision_weight": "high | medium | low",
+      "anchor": "m01 或留空——实例化自哪个受众骨架",
+      "decision_role": "gatekeeper | decision_maker | implementer（若 anchor 非空则必填）",
+      "funnel_stage": "why | what | how（若 anchor 非空则必填）",
+      "preferred_channels": ["偏好渠道1", "偏好渠道2"],
+      "avoid_channels": ["回避渠道1"],
       "daily_tasks": ["日常任务1", "日常任务2", "..."],
       "search_queries": ["具体搜索词1", "具体搜索词2", "..."],
       "info_channels": ["渠道1", "渠道2", "..."],

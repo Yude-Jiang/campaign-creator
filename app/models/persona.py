@@ -22,3 +22,9 @@ class Persona(BaseModel):
     vp_argument: str = ""                   # Expanded VP argument
     vp_proof_points: list[str] = Field(default_factory=list)
     vp_competitor_comparison: dict[str, str] = Field(default_factory=dict)
+    anchor: str = ""                        # Master persona code (e.g. "m01") — internal only
+    basis: Literal["research", "generated"] = "generated"
+    decision_role: str = ""                 # gatekeeper | decision_maker | implementer
+    funnel_stage: str = ""                  # why | what | how
+    preferred_channels: list[str] = Field(default_factory=list)
+    avoid_channels: list[str] = Field(default_factory=list)

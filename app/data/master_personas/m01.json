@@ -1,0 +1,41 @@
+{
+  "code": "m01",
+  "schema_version": "1.0",
+  "label": "外部技术把关型",
+  "decision_role": "gatekeeper",
+  "funnel_stage": "why",
+  "decision_weight": {
+    "initiates": true,
+    "final_authority": false,
+    "influence_on_next_stage": "high"
+  },
+  "gate_question": "这个技术方向到底可不可行？",
+  "jobs_to_be_done": [
+    {"stage": "application_analysis", "business_impact": "main"},
+    {"stage": "feasibility_costing", "business_impact": "high"},
+    {"stage": "validation_of_selected_parts", "business_impact": "high"}
+  ],
+  "pain_point_themes": [
+    {
+      "theme": "fear_of_part_discontinuation",
+      "essence": "怕方案还没落地就已过时，损害专业信誉",
+      "shared_with": ["m02", "m03"],
+      "content_countermeasure": "long_term_availability_program",
+      "reusable_across_personas": true
+    }
+  ],
+  "channel_map": {
+    "emea_us": {
+      "preferred": ["whitepaper", "academic_papers", "peer_network", "industry_webinar"],
+      "avoid": ["product_page_seo"]
+    },
+    "china": {
+      "preferred": ["行业白皮书", "知网/学术论文", "行业会议/webinar", "同行社群"],
+      "avoid": ["产品页 SEO 内容"]
+    }
+  },
+  "campaign_objective_fit": {
+    "new_design_win": "primary_target",
+    "retention_loyalty": "secondary"
+  }
+}

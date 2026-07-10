@@ -1,0 +1,48 @@
+{
+  "code": "m03",
+  "schema_version": "1.0",
+  "label": "执行验证型",
+  "decision_role": "implementer",
+  "funnel_stage": "how",
+  "decision_weight": {
+    "initiates": false,
+    "final_authority": false,
+    "influence_on_next_stage": "high"
+  },
+  "gate_question": "这个选择好不好用、能不能长期维护？",
+  "jobs_to_be_done": [
+    {"stage": "firmware_development", "business_impact": "main"},
+    {"stage": "debug_optimization", "business_impact": "main"},
+    {"stage": "long_term_maintenance", "business_impact": "high"}
+  ],
+  "pain_point_themes": [
+    {
+      "theme": "fear_of_part_discontinuation",
+      "essence": "停产直接转化为个人返工量，期望跨代际平滑移植",
+      "shared_with": ["m01", "m02"],
+      "content_countermeasure": "long_term_availability_program",
+      "reusable_across_personas": true
+    },
+    {
+      "theme": "migration_rework_burden",
+      "essence": "停产直接转化为个人返工量；期望跨代际平滑移植，减少重复验证",
+      "shared_with": [],
+      "content_countermeasure": "cross_generation_compatibility_guide",
+      "reusable_across_personas": false
+    }
+  ],
+  "channel_map": {
+    "emea_us": {
+      "preferred": ["Stack Overflow", "GitHub", "developer_forums", "YouTube_technical_tutorials"],
+      "avoid": ["marketing_fluff"]
+    },
+    "china": {
+      "preferred": ["CSDN", "Gitee/GitHub", "电子发烧友", "开发者论坛", "B站技术教程"],
+      "avoid": ["营销包装类内容"]
+    }
+  },
+  "campaign_objective_fit": {
+    "new_design_win": "secondary",
+    "retention_loyalty": "primary_target"
+  }
+}

@@ -19,6 +19,26 @@ You are a semiconductor industry marketing strategist, specializing in deep audi
 - **Known Competitors**: {{ brief.competitors_known | join(', ') or 'Not specified' }}
 - **Additional Notes**: {{ brief.notes or 'None' }}
 
+{% if master_personas %}
+## Audience Skeletons (Internal Constraints, Code-Based)
+
+The following are validated audience skeletons. When generating campaign personas:
+
+1. Each persona MUST fill the `anchor` field with the skeleton code it instantiates from (e.g. "m01").
+2. Inherit the skeleton's decision_role, funnel_stage, and channel preferences as hard constraints; specialize name, pain_points, search_queries, and daily_tasks for the campaign topic.
+3. **Skeleton codes (m01/m02/m03) must NEVER appear in name, pain_points, value_proposition, or any other text field** — they belong only in the anchor field.
+4. Audience types not covered by skeletons (e.g. students/KOLs as influencers) may be freely generated with an empty anchor.
+
+{% for mp in master_personas %}
+### Skeleton {{ mp.code }} · {{ mp.label }}
+- Decision role: {{ mp.decision_role }} / Funnel stage: {{ mp.funnel_stage }} / Gate question: {{ mp.gate_question }}
+- Decision weight: initiates={{ mp.decision_weight.initiates }}, final_authority={{ mp.decision_weight.final_authority }}, influence_on_next={{ mp.decision_weight.influence_on_next_stage }}
+- Pain themes: {% for pt in mp.pain_point_themes %}{{ pt.theme }} ({{ pt.essence }}){% if not loop.last %}; {% endif %}{% endfor %}
+- Preferred channels: {{ mp.channel_map[region].preferred | join(', ') }}
+- Avoid channels: {{ mp.channel_map[region].avoid | join(', ') }}
+{% endfor %}
+{% endif %}
+
 ---
 
 ## Task: Deep Persona Research
@@ -107,6 +127,11 @@ For each persona, characterize these dimensions deeply:
       "layer": "decision_maker | practitioner | influencer",
       "tech_depth": "deep | moderate | shallow",
       "decision_weight": "high | medium | low",
+      "anchor": "m01 or empty — which skeleton this instantiates from",
+      "decision_role": "gatekeeper | decision_maker | implementer (required if anchor is non-empty)",
+      "funnel_stage": "why | what | how (required if anchor is non-empty)",
+      "preferred_channels": ["preferred channel 1", "preferred channel 2"],
+      "avoid_channels": ["avoid channel 1"],
       "daily_tasks": ["task 1", "task 2", "..."],
       "search_queries": ["specific search query 1", "specific search query 2", "..."],
       "info_channels": ["channel 1", "channel 2", "..."],

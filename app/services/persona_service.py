@@ -9,10 +9,43 @@ Uses a 3-phase LLM pipeline for richer, deeper output:
 import json
 import logging
 import re
+from datetime import datetime
+from pathlib import Path
 
 from app.services.llm_router import llm_router
 
 logger = logging.getLogger(__name__)
+
+MASTER_PERSONA_DIR = Path(__file__).parent.parent / "data" / "master_personas"
+_CODE_PATTERN = re.compile(r"\bm0\d\b")
+
+
+def _load_master_personas() -> list[dict]:
+    """Load master persona skeletons. Returns [] if dir missing (graceful degradation)."""
+    if not MASTER_PERSONA_DIR.is_dir():
+        return []
+    result = []
+    for f in sorted(MASTER_PERSONA_DIR.glob("m*.json")):
+        try:
+            result.append(json.loads(f.read_text(encoding="utf-8")))
+        except Exception as e:
+            logger.warning("Skipping malformed master persona %s: %s", f.name, e)
+    return result
+
+
+def _scrub_codes(persona: dict) -> dict:
+    """Remove anchor codes leaked into any text field (model sometimes echoes context ids)."""
+    for key, val in persona.items():
+        if key == "anchor":
+            continue
+        if isinstance(val, str):
+            persona[key] = _CODE_PATTERN.sub("", val).strip()
+        elif isinstance(val, list):
+            persona[key] = [
+                _CODE_PATTERN.sub("", v).strip() if isinstance(v, str) else v
+                for v in val
+            ]
+    return persona
 
 
 def _extract_json_block(text: str) -> str:
@@ -125,6 +158,12 @@ def _ensure_persona_defaults(persona: dict) -> dict:
     persona.setdefault("vp_argument", "")
     persona.setdefault("vp_proof_points", [])
     persona.setdefault("vp_competitor_comparison", {})
+    persona.setdefault("anchor", "")
+    persona.setdefault("basis", "generated")
+    persona.setdefault("decision_role", "")
+    persona.setdefault("funnel_stage", "")
+    persona.setdefault("preferred_channels", [])
+    persona.setdefault("avoid_channels", [])
     return persona
 
 
@@ -168,10 +207,23 @@ async def generate_personas_and_questions(
 
     # ── Phase 1: Persona Discovery ──
     logger.info("Phase 1: Persona Discovery (Gemini + grounding)")
+
+    # Load master persona skeletons (graceful degradation if dir missing)
+    master_personas = _load_master_personas()
+    region = "china" if language == "zh" else "emea_us"
+    if master_personas:
+        logger.info("Loaded %d master persona skeletons (region=%s)", len(master_personas), region)
+    else:
+        logger.info("No master personas found — using pure generation mode")
+
     p1_result = await llm_router.route_and_generate(
         task="persona_discovery",
         prompt_name="persona_discovery.md",
-        variables={"brief": brief},
+        variables={
+            "brief": brief,
+            "master_personas": master_personas,
+            "region": region,
+        },
         language=language,
         max_tokens=8192,
     )
@@ -188,6 +240,15 @@ async def generate_personas_and_questions(
             "name": "技术决策者" if language == "zh" else "Technical Decision Maker",
             "layer": "practitioner",
         }]
+
+    # Scrub leaked codes + validate anchors against loaded master set
+    valid_codes = {mp["code"] for mp in master_personas}
+    for p in personas:
+        _scrub_codes(p)
+        anchor = p.get("anchor", "")
+        if anchor and anchor not in valid_codes:
+            p["anchor"] = ""
+        p["basis"] = "research" if p.get("anchor") else "generated"
 
     # Ensure defaults on all personas
     personas = [_ensure_persona_defaults(p) for p in personas]
@@ -243,6 +304,15 @@ async def generate_personas_and_questions(
     # Ensure defaults on all questions
     questions = [_ensure_question_defaults(q) for q in questions]
 
+    # Snapshot which master persona versions were used (freeze principle)
+    master_snapshot = None
+    if master_personas:
+        master_snapshot = {
+            "codes": [mp["code"] for mp in master_personas],
+            "schema_version": master_personas[0].get("schema_version", "1.0") if master_personas else "1.0",
+            "loaded_at": datetime.now().isoformat(),
+        }
+
     return {
         "personas": personas,
         "value_propositions": value_props,
@@ -250,4 +320,5 @@ async def generate_personas_and_questions(
         "model": " + ".join(models_used),
         "grounding_used": grounding_used,
         "grounding_sources": grounding_sources,
+        "master_persona_snapshot": master_snapshot,
     }

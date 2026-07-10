@@ -11,6 +11,7 @@
    - P1: strategic_importance ≥ 3 OR (winnability ≥ 3 AND st_current_strength ≤ 3)
    - P2: 其余所有情况
    注意：P1 使用 OR 条件——只要 strategic_importance 高（≥3）或可争夺且有空间，即为 P1。代码验证将以同样公式重新计算确保一致性。
+6. **渠道尊重受众约束**：content_plan 中某条目的 target_persona 若带有 avoid_channels，该条目的 channel 不得落在其中；优先从 preferred_channels 选择。
 
 ---
 
@@ -28,7 +29,9 @@
 ## 目标 Persona
 
 {% for p in personas %}
-- **{{ p.name }}** ({{ p.layer }}): {{ p.value_proposition }}
+- **{{ p.name }}** ({{ p.layer }}{% if p.decision_role %} · {{ p.decision_role }}{% endif %}{% if p.funnel_stage %} · 漏斗: {{ p.funnel_stage }}{% endif %}): {{ p.value_proposition }}
+{% if p.preferred_channels %}- 偏好渠道: {{ p.preferred_channels | join(', ') }}{% endif %}
+{% if p.avoid_channels %}- 回避渠道: {{ p.avoid_channels | join(', ') }}{% endif %}
 {% endfor %}
 
 ---
@@ -93,6 +96,7 @@
 - 每个 P0/P1 问题至少 2-3 个 content_plan 条目，覆盖不同渠道和格式
 - 确保每个 target Persona 至少被 1 个内容条目覆盖
 - channel_type 标注为 "organic"（有机渠道）或 "paid"（付费渠道）
+- 多个 Persona 共享同一痛点主题时，优先规划一条跨 persona 复用的内容线（一份核心素材 + 按 persona 层级适配深度/渠道），在各自条目的 content_brief 中注明复用关系，避免同一主题重复生产
 - format 使用上述枚举值之一，不要自由发挥
 - content_brief 是内容编辑指引（核心论点 + 差异化点 + 目标问题），下游会根据格式模板组合完整 prompt
 

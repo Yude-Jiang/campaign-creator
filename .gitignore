@@ -9,6 +9,8 @@ __pycache__/
 
 # Runtime data (contains API keys in campaign JSON)
 data/
+!app/data/
+app/data/master_personas/PROVENANCE.md
 
 # Temp files
 tmp_*

@@ -1,0 +1,48 @@
+{
+  "code": "m02",
+  "schema_version": "1.0",
+  "label": "内部拍板型",
+  "decision_role": "decision_maker",
+  "funnel_stage": "what",
+  "decision_weight": {
+    "initiates": false,
+    "final_authority": true,
+    "influence_on_next_stage": "high"
+  },
+  "gate_question": "选哪个平台、哪家供应商？",
+  "jobs_to_be_done": [
+    {"stage": "specifications", "business_impact": "main"},
+    {"stage": "part_selection", "business_impact": "main"},
+    {"stage": "production_quality", "business_impact": "high"}
+  ],
+  "pain_point_themes": [
+    {
+      "theme": "fear_of_part_discontinuation",
+      "essence": "停产风险直接转化为整线被迫重设计，成本工期失控",
+      "shared_with": ["m01", "m03"],
+      "content_countermeasure": "long_term_availability_program",
+      "reusable_across_personas": true
+    },
+    {
+      "theme": "forced_platform_redesign",
+      "essence": "整线被迫重设计，成本工期失控——需要一个稳定平台承诺",
+      "shared_with": [],
+      "content_countermeasure": "platform_stability_roadmap",
+      "reusable_across_personas": false
+    }
+  ],
+  "channel_map": {
+    "emea_us": {
+      "preferred": ["vendor_website", "competitor_website", "standards_bodies", "technical_documentation_center"],
+      "avoid": ["third_party_aggregators"]
+    },
+    "china": {
+      "preferred": ["厂商官网", "竞品官网", "法规/标准网站", "官网技术文档中心"],
+      "avoid": ["非官方二手信息源"]
+    }
+  },
+  "campaign_objective_fit": {
+    "new_design_win": "primary",
+    "retention_loyalty": "secondary"
+  }
+}
