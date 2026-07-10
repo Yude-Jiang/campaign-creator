@@ -94,7 +94,7 @@
         <div style="display:flex;gap:8px;margin-bottom:12px;">
           <textarea id="prompt-{{ pi }}-{{ ci }}" style="display:none;">{{ item.get('content_brief', item.get('llm_prompt', '')) }}</textarea>
           <button class="btn btn-secondary" style="font-size:12px;padding:6px 14px;"
-                  onclick="copyPrompt({{ pi }}, {{ ci }})">
+                  onclick="copyPrompt({{ pi }}, {{ ci }}, event)">
             📋 {% if language == 'zh' %}复制 Prompt{% else %}Copy Prompt{% endif %}
           </button>
           <button class="btn btn-primary" style="font-size:12px;padding:6px 14px;"
@@ -136,13 +136,13 @@
 
 {% block extra_js %}
 <script>
-async function copyPrompt(pi, ci) {
+async function copyPrompt(pi, ci, e) {
   const textarea = document.getElementById('prompt-' + pi + '-' + ci);
   if (!textarea) return;
   try {
     await navigator.clipboard.writeText(textarea.value);
     // Brief visual feedback
-    const btn = event.target;
+    const btn = e.target;
     const original = btn.textContent;
     btn.textContent = '{% if language == "zh" %}已复制！{% else %}Copied!{% endif %}';
     btn.style.background = '#22c55e';
