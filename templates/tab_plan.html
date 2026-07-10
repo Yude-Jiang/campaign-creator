@@ -34,7 +34,7 @@
     </h3>
     <p style="color:var(--slate);font-size:14px;margin-bottom:20px;">
       {% if language == 'zh' %}
-      点击下方按钮，AI 将读取所有诊断文件，分析 ST 的 AI 感知现状、竞品格局，并生成完整的执行计划。
+      点击下方按钮，AI 将读取所有诊断文件，分析 {{ brief.name }} 的 AI 感知现状、竞品格局，并生成完整的执行计划。
       {% else %}
       Click below for AI to read all diagnosis files, analyze ST's AI perception and competitive landscape, then generate a full execution plan.
       {% endif %}
@@ -72,7 +72,7 @@
   {% if plan.inverted_pyramid %}
   <div class="card fade-up2" id="sec-pyramid" style="margin-bottom:20px;">
     <div class="card-header">
-      🔺 {% if language == 'zh' %}倒金字塔 — ST 召回强度{% else %}Inverted Pyramid — ST Recall Strength{% endif %}
+      🔺 {% if language == 'zh' %}倒金字塔 — 品牌召回强度{% else %}Inverted Pyramid — Brand Recall Strength{% endif %}
     </div>
     <div class="card-body">
       {% for qid, data in plan.inverted_pyramid.items() %}
@@ -110,7 +110,7 @@
           <span class="chip chip-{{ 'strong' if (cl.position or cl.get('layer','')) in ['leader','strong'] else 'moderate' }}"
                 style="margin-top:6px;">{{ cl.position or cl.get('layer', '') }}</span>
           <div style="font-size:12px;margin-top:8px;color:var(--slate);line-height:1.5;">
-            <strong>{% if language == 'zh' %}ST 策略：{% else %}ST Strategy: {% endif %}</strong>{{ cl.st_strategy or '' }}
+            <strong>{% if language == 'zh' %}策略：{% else %}Strategy: {% endif %}</strong>{{ cl.st_strategy or '' }}
           </div>
         </div>
         {% endfor %}
@@ -137,7 +137,7 @@
             <th onclick="sortPriorityTable('priority')" style="cursor:pointer;">P ▾</th>
             <th>{% if language == 'zh' %}问题{% else %}Question{% endif %}</th>
             <th onclick="sortPriorityTable('si')" style="cursor:pointer;">{% if language == 'zh' %}战略{% else %}SI{% endif %} ▾</th>
-            <th onclick="sortPriorityTable('st')" style="cursor:pointer;">ST ▾</th>
+            <th onclick="sortPriorityTable('st')" style="cursor:pointer;">品牌 ▾</th>
             <th onclick="sortPriorityTable('win')" style="cursor:pointer;">{% if language == 'zh' %}可争夺{% else %}Win{% endif %} ▾</th>
             <th>{% if language == 'zh' %}差距类型{% else %}Gap{% endif %}</th>
             <th>{% if language == 'zh' %}锚点{% else %}Anchor{% endif %}</th>

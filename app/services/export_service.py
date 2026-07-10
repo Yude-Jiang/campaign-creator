@@ -46,7 +46,7 @@ def _format_priorities(priorities: list[dict]) -> str:
         return "_No priorities defined._"
 
     lines = [
-        "| Priority | Question | Strategic | ST Strength | Winnability | Gap Type | Anchor Point |",
+        "| Priority | Question | Strategic | Brand Strength | Winnability | Gap Type | Anchor Point |",
         "|----------|----------|-----------|-------------|-------------|----------|-------------|",
     ]
     for p in priorities:
@@ -207,7 +207,7 @@ def export_to_markdown(plan: dict, campaign_data: dict | None = None) -> str:
     # Competitor landscape
     comp_landscape = plan.get("competitor_landscape", [])
     if comp_landscape:
-        lines.append("| Layer | Competitor | Position | ST Strategy |")
+        lines.append("| Layer | Competitor | Position | Strategy |")
         lines.append("|-------|-----------|----------|-------------|")
         for cl in comp_landscape:
             layer = cl.get("layer", "")
@@ -404,7 +404,7 @@ def export_to_html(plan: dict, campaign_data: dict | None = None) -> str:
     comp_landscape = plan.get("competitor_landscape", [])
     if comp_landscape:
         html += """<table>
-      <tr><th>Layer</th><th>Competitor</th><th>Position</th><th>ST Strategy</th></tr>"""
+      <tr><th>Layer</th><th>Competitor</th><th>Position</th><th>Strategy</th></tr>"""
         for cl in comp_landscape:
             layer = cl.get("layer", "")
             competitor = cl.get("competitor", "")
@@ -420,7 +420,7 @@ def export_to_html(plan: dict, campaign_data: dict | None = None) -> str:
     priorities = plan.get("priorities", [])
     if priorities:
         html += """<table>
-      <tr><th>Priority</th><th>Question</th><th>Strategic</th><th>ST Strength</th><th>Winnability</th><th>Gap Type</th><th>Anchor</th></tr>"""
+      <tr><th>Priority</th><th>Question</th><th>Strategic</th><th>Brand Strength</th><th>Winnability</th><th>Gap Type</th><th>Anchor</th></tr>"""
         for p in priorities:
             priority = (p.get("priority") or "P2")
             badge = f'<span class="badge-{priority.lower()}">{priority}</span>'

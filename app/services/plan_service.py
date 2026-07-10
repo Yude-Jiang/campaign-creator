@@ -8,7 +8,7 @@ import json
 import logging
 
 from app.services.llm_router import llm_router
-from app.utils.json_parser import safe_parse_json
+from app.utils.json_parser import safe_parse_json, check_anchor_specificity
 
 logger = logging.getLogger(__name__)
 
@@ -87,6 +87,7 @@ async def generate_campaign_plan(
             prompt_name="generate_plan.md",
             variables={
                 "brief": brief,
+                "questions": questions,
                 "analysis_json": json.dumps(analysis_json, ensure_ascii=False, indent=2),
                 "personas": personas,
             },
@@ -149,6 +150,22 @@ async def generate_campaign_plan(
             item["priority"] = "P1"
         else:
             item["priority"] = "P2"
+
+    # ── Post-process: Check anchor specificity (advisory, not blocking) ──
+    generic_count = 0
+    for item in plan_json.get("priorities", []):
+        anchor = item.get("anchor_point", "")
+        check = check_anchor_specificity(anchor, language)
+        if not check["ok"]:
+            item["_anchor_warning"] = check["warning"]
+            generic_count += 1
+    if generic_count > 0:
+        plan_json["_anchor_generic_count"] = generic_count
+        logger.info(
+            "Anchor specificity check: %d/%d priorities flagged as generic",
+            generic_count,
+            len(plan_json.get("priorities", [])),
+        )
 
     # Attach metadata about the generation process
     plan_json["_generation_meta"] = {

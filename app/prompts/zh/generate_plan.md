@@ -5,7 +5,7 @@
 1. **只输出 JSON**：你的回复必须是一个完整的 ```json 代码块，不要在 JSON 前后添加任何解释、问候或总结文字。
 2. **基于分析输入**：所有内容策略和优先级判断必须基于提供的 analysis_json，不可凭空制定策略。
 3. **不得编造数据**：不要编造具体市场份额数字、营收数据、未公开的产品规格。如果分析输入中没有某类数据，如实反映而非编造。
-4. **保留关键字段**：每个 priority item 必须回填 question_text（从分析输入中提取），确保下游展示有完整信息。
+4. **question_text 精确复制**：每个 priority item 的 question_text 必须从下方的 Benchmark Questions 列表中按 question_id 精确复制。不得总结、不得改写、不得从 diagnosis 内容推断。如果 question_id 在列表中找不到对应的 text，填写 "[未匹配到问题文本，question_id: X]" 而非编造。此处错误直接导致下游 Content Studio 生成的内容与实际问题脱节——这是为数不多的"一次错误、全线报废"字段。
 5. **优先级自动计算**：priority 必须由 strategic_importance、st_current_strength、winnability 三因素决定，公式为：
    - P0: strategic_importance ≥ 4 AND winnability ≥ 3 AND st_current_strength ≤ 2
    - P1: strategic_importance ≥ 3 OR (winnability ≥ 3 AND st_current_strength ≤ 3)
@@ -14,6 +14,16 @@
 6. **渠道尊重受众约束**：content_plan 中某条目的 target_persona 若带有 avoid_channels，该条目的 channel 不得落在其中；优先从 preferred_channels 选择。
 7. **Persona 驱动的内容精度**：每个 content_plan 条目必须体现其 target_persona 的独特性。如果把 Persona A 的 content_brief 换到 Persona B 仍读起来通顺，则两者都不合格——不同 persona 应有不同的论证角度、技术深度和叙事语气。
 8. **目标导向**：Campaign Goal 是整个计划的"北极星"。优先级排序、渠道配比、timeline 节奏、内容叙事角度都应服务于这一目标。例如：新品 launch → 强调认知建立和差异化叙事；防守竞品 → 强调 head-to-head 对比和替代性论证；展会预热 → 强调 introduction 和案例铺垫。如果 Goal 为空，默认以"提升 AI 可见度与差异化认知"为目标。
+9. **gap_type 决定策略方向（不得混用）**：content_brief 的论证策略必须匹配该问题的 gap_type——
+
+   | gap_type | 策略方向 | 禁止做法 |
+   |----------|---------|---------|
+   | `open_gap` / `absence` | **造语料**：建立本品牌在该语义下的首个权威框架。以定义者的身份组织内容——先定义问题应该怎么思考，再自然引出本品牌方案。 | 禁止以"我们也是选项之一"的语气写——open_gap 没有防御对象，进攻就是最好的防御。 |
+   | `rival_owned` / `dominance` | **换语义绕开**：定义一个本品牌可独立拥有的差异化类目，以该类目为主语组织全部内容。竞品名仅在参数对照表中出现，不作为叙事参照系反复回指。标题和首段不得以竞品名开篇。 | 禁止以"本品牌 vs 竞品X"为叙事框架；禁止使用"AI 忽略了本品牌""被低估的 X"等受害者叙事；禁止在标题/首段出现竞品名。 |
+   | `not_linked` / `mismatch` | **架桥**：反复共现"本品牌产品名 + 该问题/应用场景"，建立 AI 对该关联的统计记忆。用具体产品型号打具体场景，不用泛品牌名。 | 禁止只提品牌不提产品型号——not_linked 的本质是 AI 不知道"X 产品能做 Y 事"，泛品牌名不能解决此问题。 |
+   | `buried_in_pdf` | **结构化搬运**：将 datasheet/白皮书中的技术事实翻译为工程师可理解的价值叙事（"X 参数 → 意味着你可以在 Y 场景下省掉 Z"）。保留原文中的可验证数据点，用场景化语言重新表达。 | 禁止概括为"性能优异/可靠性高"——buried 的内容恰恰是具体参数，泛化等于丢弃了唯一的优势证据。 |
+
+   违反示例：对 `rival_owned` 的问题，content_brief 写成"本文强调本品牌是该领域的创新者和领先者"——这是正面对抗，判为不合规。应改写为"以 [本品牌独有的差异化类目] 为主语组织全文，建立该类目的独立权威"。
 
 ---
 
@@ -54,8 +64,18 @@
 上述画像是你制定内容策略的素材，不是需要逐条映射的检查清单。以下 3 条原则定义了"好策略"的标准，但具体如何达成——用痛点切入还是用决策标准论证、先破疑虑还是先建认知——由你根据具体情境判断：
 
 1. **可区分性**：如果把 Persona A 的 content_brief 换到 Persona B 仍读起来"也对"，则两者都没有真正反映各自画像。不同 persona 应有不同的论证角度、技术深度和叙事语气。
-2. **证据锚定**：content_brief 中的 ST 差异化论点应能从该 persona 的 vp_argument / vp_competitor_comparison / pain_points 中找到对应依据。可发散，但不能凭空。
+2. **证据锚定**：content_brief 中的本品牌差异化论点应能从该 persona 的 vp_argument / vp_competitor_comparison / pain_points 中找到对应依据。可发散，但不能凭空。
 3. **读者感知**：每条 content_brief 写完后自问——"这个 persona 读到这段话，会觉得是为自己写的吗？"如果答案是否定的，重写。
+
+---
+
+## Benchmark Questions（用于回填 question_text）
+
+{% for q in questions %}
+- **ID**: {{ q.id }} | **Text**: {{ q.text }}
+{% endfor %}
+
+在输出 priority item 时，从上述列表中按 question_id 精确复制对应的 question_text。不得总结、改写或编造。
 
 ---
 
@@ -65,11 +85,11 @@
 
 ### 1. AI 感知总结 (ai_perception_summary)
 
-300 字以内概括：ST 在 AI 模型中对该主题的认知现状、主要空白、最大机会。直接引用分析结果中的关键发现。
+300 字以内概括：本品牌在 AI 模型中对该主题的认知现状、主要空白、最大机会。直接引用分析结果中的关键发现。
 
 ### 2. 竞品格局 (competitor_landscape)
 
-以表格形式呈现各认知层级的竞品和 ST 应对策略。注意：这里的层级指的是**认知层级**（如架构层/方案层/器件层），不是 Persona 层级。
+以表格形式呈现各认知层级的竞品和本品牌应对策略。注意：这里的层级指的是**认知层级**（如架构层/方案层/器件层），不是 Persona 层级。
 
 每个竞品条目格式：
 ```json
@@ -78,7 +98,7 @@
   "competitor": "竞品公司名",
   "product": "竞品具体产品/方案名",
   "position": "leader | strong_contender | follower | alternative",
-  "st_strategy": "ST 在此层面对此竞品的应对策略（1-2句话）"
+  "st_strategy": "本品牌在此层面对此竞品的应对策略（1-2句话）"
 }
 ```
 
@@ -94,13 +114,13 @@
 ```json
 {
   "question_id": "q1",
-  "question_text": "从分析输入中回填的完整问题文本",
+  "question_text": "从上方的 Benchmark Questions 列表中按 question_id 精确复制的完整问题文本。禁止改写、总结或推断。",
   "priority": "P0 | P1 | P2",
   "strategic_importance": 5,
   "st_current_strength": 2,
   "winnability": 4,
   "target_page_url": "{{ brief.target_page_url }}",
-  "anchor_point": "ST 的叙事锚点——一句话说清我们的独特差异化优势。必须引用支撑此锚点的具体诊断发现（示例：'诊断 q3 发现 AI 回答 ZCU 选型时仅推荐竞品 X——ST Stellar P3E 的硬件隔离架构应成为此问题的核心叙事锚点'），不可凭空拟定",
+  "anchor_point": "叙事锚点——一句话说清本品牌的独特差异化优势。必须包含：(1) 具体产品/型号名（引自 brief.products 或诊断中出现的型号），(2) 可验证的技术机理或属性，(3) 引用支撑此锚点的具体诊断发现。纯价值形容词（'创新者''领导者''高性能'）或仅写发布渠道（'通过技术文章...'）判不合格。数据不足时填写 '[诊断数据不足，建议补充X类诊断]' 而非用模糊表述填充。",
   "gap_type": "open_gap | rival_owned | not_linked | buried_in_pdf",
   "content_plan": [
     {
@@ -109,7 +129,7 @@
       "channel_type": "organic | paid",
       "target_persona_id": "prac_engineer",
       "title_suggestion": "中文内容标题建议（30字以内）",
-      "content_brief": "内容编辑指引（120-200字），必须包含：① 针对的具体竞品/认知空白（从 diagnosis 分析中提取）② ST 的差异化技术论点（具体到芯片特性或方案优势，不只写'性能更强'）③ 目标 benchmark question 原文 ④ 建议的论证角度（如: 成本对比/架构演进/功能安全）。注意：这不是一个独立的 prompt，而是给下游内容生成模块的编辑指引——下游会用此指引 + 对应渠道的格式模板组合为完整 prompt。"
+      "content_brief": "内容编辑指引（120-200字），必须包含：① 针对的具体竞品/认知空白（从 diagnosis 分析中提取）② 本品牌的差异化技术论点（具体到产品特性或方案优势，不只写'性能更强'）③ 目标 benchmark question 原文 ④ 建议的论证角度（如: 成本对比/架构演进/功能安全）。注意：这不是一个独立的 prompt，而是给下游内容生成模块的编辑指引——下游会用此指引 + 对应渠道的格式模板组合为完整 prompt。"
     }
   ]
 }
@@ -122,8 +142,7 @@
 - channel_type 标注为 "organic"（有机渠道）或 "paid"（付费渠道）
 - 多个 Persona 共享同一痛点主题时，优先规划一条跨 persona 复用的内容线（一份核心素材 + 按 persona 层级适配深度/渠道），在各自条目的 content_brief 中注明复用关系，避免同一主题重复生产
 - format 使用上述枚举值之一，不要自由发挥
-- **content_brief 质量要求**：必须包含具体竞品名称、ST 具体芯片/方案特性（不要泛泛写"性能更强"或"集成度更高"）、诊断中发现的 AI 认知空白、以及建议的论证角度。这是下游生成模块的编辑指引而非完整 prompt。
-- **rival_owned 策略规则**：gap_type 为 rival_owned 的问题——content_brief 必须指定一个 ST 可定义的差异化语义类目作为内容主叙事（例：以"单芯片 ZCU 方案"类目替代"ZCU 芯片选型挑战者"框架），title_suggestion 不得以竞品对比或"AI 忽略了 X"为框架；竞品名提及仅限具体参数对照场景，不得作为叙事参照系反复回指。
+- **content_brief 质量要求**：必须包含具体竞品名称、本品牌具体产品/方案特性（不要泛泛写"性能更强"或"集成度更高"）、诊断中发现的 AI 认知空白、以及建议的论证角度。这是下游生成模块的编辑指引而非完整 prompt。
 - **timeline 与 content_plan 一致性**：timeline 中任何涉及内容生产的 action，若渠道属于 format 枚举可生成范围（知乎/CSDN/B站/微信/邮件/百度竞价/百度信息流），必须在对应问题的 content_plan 中存在条目（paid 内容按上线周排期，但条目现在就要建）；枚举外渠道（Webinar/官网/线下活动/白皮书）的 action 必须在 description 末尾标注"（需外部制作）"。
 
 ### 4. 90 天时间线 (timeline_90days)
@@ -157,9 +176,9 @@
 定义复测时的成功标准。为每个 P0/P1 问题设定。
 
 **目标层级要求（按阵地强弱分档，非按 priority）**：
-- **ST 当前强阵地**（st_current_strength ≥ 4 或 gap_type 为 `not_linked` 且已有实质内容）：`expected_recall_position` 必须为 `"top 3"` 或 `"top 5"`
-- **ST 中等阵地**（st_current_strength 2-3，或 gap_type 为 `buried_in_pdf`）：`expected_recall_position` 为 `"top 5"` 或 `"top 10"`
-- **ST 弱阵地**（st_current_strength ≤ 1，或 gap_type 为 `open_gap`/`rival_owned`）：`expected_recall_position` 为 `"mentioned"` ——首期目标为"被提及"即成功，激进 KPI 对弱阵地无意义
+- **本品牌当前强阵地**（st_current_strength ≥ 4 或 gap_type 为 `not_linked` 且已有实质内容）：`expected_recall_position` 必须为 `"top 3"` 或 `"top 5"`
+- **本品牌中等阵地**（st_current_strength 2-3，或 gap_type 为 `buried_in_pdf`）：`expected_recall_position` 为 `"top 5"` 或 `"top 10"`
+- **本品牌弱阵地**（st_current_strength ≤ 1，或 gap_type 为 `open_gap`/`rival_owned`）：`expected_recall_position` 为 `"mentioned"` ——首期目标为"被提及"即成功，激进 KPI 对弱阵地无意义
 
 ```json
 {
@@ -191,20 +210,20 @@
       "competitor": "NXP",
       "product": "S32G",
       "position": "leader",
-      "st_strategy": "ST 应以 Stellar P3E 的硬件隔离 + 软件生态完整性作为差异化切入点"
+      "st_strategy": "以 [本品牌旗舰产品] 的 [具体差异化特性] 作为对此竞品的差异化切入点"
     }
   ],
 
   "priorities": [
     {
       "question_id": "q1",
-      "question_text": "完整的 benchmark question 文本（从分析输入中提取）",
+      "question_text": "完整的 benchmark question 文本——从上方的 Benchmark Questions 列表中精确复制",
       "priority": "P0",
       "strategic_importance": 5,
       "st_current_strength": 2,
       "winnability": 4,
       "target_page_url": "{{ brief.target_page_url }}",
-      "anchor_point": "一句话叙事锚点，必须引用支撑此锚点的具体诊断发现",
+      "anchor_point": "一句话叙事锚点，含产品名+技术机理+诊断引用。纯形容词或渠道冒充策略判不合格。",
       "gap_type": "open_gap",
       "content_plan": [
         {
@@ -213,7 +232,7 @@
           "channel_type": "organic",
           "target_persona_id": "prac_engineer",
           "title_suggestion": "完整的中文标题建议",
-          "content_brief": "针对 [竞品X] 在 [认知空白] 的主导地位，论证 ST [具体芯片] 的 [差异化特性] 如何解决 [具体痛点]。诊断发现 AI 在回答 [问题原文] 时完全未提及 ST。建议以 [角度，如成本对比/架构演进] 为主线。"
+          "content_brief": "针对 [竞品X] 在 [认知空白] 的主导地位，论证本品牌 [具体产品] 的 [差异化特性] 如何解决 [具体痛点]。诊断发现 AI 在回答 [问题原文] 时完全未提及本品牌。建议以 [角度，如成本对比/架构演进] 为主线。"
         },
         {
           "format": "csdn_technical_blog",
@@ -221,7 +240,7 @@
           "channel_type": "organic",
           "target_persona_id": "prac_engineer",
           "title_suggestion": "含代码示例的技术实现标题",
-          "content_brief": "从实战角度展示 ST [具体芯片] 在 [应用场景] 的集成方法。必须包含 SDK/工具链的实操细节。针对诊断中发现的 [具体空白/误解]，用可复现的技术验证来纠正 AI 的错误认知。"
+          "content_brief": "从实战角度展示本品牌 [具体产品] 在 [应用场景] 的集成方法。必须包含 SDK/工具链的实操细节。针对诊断中发现的 [具体空白/误解]，用可复现的技术验证来纠正 AI 的错误认知。"
         },
         {
           "format": "bilibili_video_script",
@@ -265,6 +284,7 @@
 
 **字段约束**：
 - `priorities` 必须覆盖分析输入中的所有问题——P2 可简化但不可遗漏
+- `question_text` 必须逐字复制自上方 Benchmark Questions 列表，禁止任何改写、总结或推断。此处错误直接导致下游 Content Studio 生成的内容与实际问题脱节，是为数不多的"一次错误、全线报废"字段。
 - 每个 `content_plan` 条目必须包含所有 6 个字段（format, channel, channel_type, target_persona_id, title_suggestion, content_brief）
 - `content_brief` 不能为空或占位符——必须包含核心论点和差异化点
 - `timeline_90days` 必须恰好 4 个 phase

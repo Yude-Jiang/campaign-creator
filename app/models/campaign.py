@@ -15,6 +15,7 @@ class CampaignBrief(BaseModel):
     materials: list[str] = Field(default_factory=list)
     goal: str = ""                          # Business objective, e.g. "新品launch造势", "防守NXP design-in"
     notes: str = ""
+    industry: str = ""                      # Industry context, e.g. "半导体", "工业自动化", "生物医药"
     language: Literal["zh", "en"] = "zh"
 
 

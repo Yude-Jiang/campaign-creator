@@ -126,3 +126,61 @@ def safe_parse_json(text: str) -> dict:
 
     logger.error("Could not recover JSON from LLM output. Raw: %s", text[:500])
     return {}
+
+
+# ── Anchor Specificity Validation ──
+# NOTE: The model-token regex [A-Z][A-Z0-9]+ assumes English alphanumeric product
+# naming (e.g., "P3E", "S32G"). Pure-Chinese product names (e.g., "骁龙8Gen3")
+# or mixed-script names may not match. This is an acceptable simplification for the
+# initial rollout — if usage expands to non-semiconductor industries, this regex
+# should be reviewed and potentially parameterized by industry convention.
+
+_GENERIC_ANCHOR_PATTERNS_ZH = [
+    re.compile(r"通过(技术文章|白皮书|合作新闻|内容)"),
+    re.compile(r"加强(可见度|认知|影响力)"),
+    re.compile(r"提升(品牌|行业|市场)"),
+    re.compile(r"^(创新者|领导者|领先的|高性能)$"),
+]
+
+_GENERIC_ANCHOR_PATTERNS_EN = [
+    re.compile(
+        r"(strengthen|enhance|improve|boost|increase)\s+(visibility|awareness|presence|influence|recognition)",
+        re.IGNORECASE,
+    ),
+    re.compile(
+        r"through\s+(technical\s+articles|whitepapers|partner\s+news|content\s+marketing)",
+        re.IGNORECASE,
+    ),
+    re.compile(
+        r"^(innovator|leader|industry[- ]leading|best[- ]in[- ]class|market[- ]leading)$",
+        re.IGNORECASE,
+    ),
+]
+
+
+def check_anchor_specificity(anchor: str, language: str = "zh") -> dict:
+    """Check if an anchor_point is generic. Returns {'ok': bool, 'warning': str}.
+
+    Advisory-only — does not block plan generation. Hit-rate data is collected
+    via the returned warning to inform future decisions about upgrading to a
+    hard block.
+    """
+    if not anchor or len(anchor) < 20:
+        return {"ok": False, "warning": "anchor_point too short or empty"}
+
+    patterns = _GENERIC_ANCHOR_PATTERNS_EN if language == "en" else _GENERIC_ANCHOR_PATTERNS_ZH
+    for pat in patterns:
+        if pat.search(anchor):
+            return {
+                "ok": False,
+                "warning": f"anchor_point appears generic: '{anchor[:80]}...'",
+            }
+
+    # Check for product/model reference (see NOTE above about naming assumption)
+    if not re.search(r"[A-Z][A-Z0-9]+", anchor):
+        return {
+            "ok": False,
+            "warning": f"anchor_point lacks product/model reference: '{anchor[:80]}...'",
+        }
+
+    return {"ok": True, "warning": ""}

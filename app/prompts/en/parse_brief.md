@@ -10,6 +10,7 @@ You are a Campaign Brief parsing assistant. Extract structured fields from the u
 | `products` | Core products/solutions (array) | Extract all product names, chip models, solution names; comma separated |
 | `keywords` | Desired keywords (array) | Extract all technical terms, industry keywords; comma separated |
 | `competitors_known` | Known competitors (array) | Extract mentioned competitor companies or products; comma separated |
+| `industry` | Industry | Extract the industry keyword from user description, e.g. "semiconductor", "automotive", "industrial automation". If not mentioned, infer from topic/products; if indeterminate, use "B2B technology" |
 | `goal` | Campaign business objective | Extract the business goal, e.g. "build awareness ahead of product launch", "defend against competitor design-in", "pre-show warmup". If not explicitly stated, infer the most likely goal from context; leave empty only if truly indeterminate |
 | `notes` | Additional notes | All remaining descriptive information (budget, timeline, special requirements, etc.), keep in natural language |
 
@@ -26,6 +27,7 @@ Output:
   "products": ["Stellar P3E", "Stellar G"],
   "keywords": ["ZCU", "zone controller", "automotive chip"],
   "competitors_known": ["NXP S32G", "Infineon Traveo II"],
+  "industry": "semiconductor",
   "goal": "Build awareness ahead of year-end ZCU product launch",
   "notes": "Budget $50K, 3-month timeline."
 }
