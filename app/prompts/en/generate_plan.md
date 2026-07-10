@@ -14,12 +14,15 @@ You are a marketing Campaign strategy expert, responsible for converting GEO dia
    - P2: everything else
    Note: P1 uses OR — as long as strategic_importance is high (≥3) or the gap is winnable with room, it's P1. Code verification will recalculate with the same formula for consistency.
 8. **Channel respect audience constraints**: If a content_plan entry's target_persona has avoid_channels, the entry's channel MUST NOT be in that list; prefer channels from preferred_channels.
+9. **Persona-driven content precision**: Every content_plan entry must reflect the uniqueness of its target_persona. If you can swap Persona A's content_brief into Persona B and it still reads naturally, both are failing — different personas should differ in argument angle, technical depth, and narrative tone.
+10. **Goal-oriented strategy**: The Campaign Goal is the north star for the entire plan. Priority ranking, channel mix, timeline pacing, and content narrative angle should all serve this goal. Examples: product launch → emphasize awareness-building and differentiation narrative; competitor defense → emphasize head-to-head comparison and substitution arguments; trade show warm-up → emphasize introductory content and use-case groundwork. If Goal is empty, default to "improve AI visibility and differentiated perception."
 
 ---
 
 ## Campaign Background
 
 - **Campaign**: {{ brief.name }}
+- **Business Goal**: {{ brief.goal or 'Improve AI visibility and differentiated perception' }}
 - **Topic**: {{ brief.topic }}
 - **Target Page**: {{ brief.target_page_url }}
 - **Products/Solutions**: {{ brief.products | join(', ') }}
@@ -28,13 +31,33 @@ You are a marketing Campaign strategy expert, responsible for converting GEO dia
 
 {{ analysis_json }}
 
-## Target Personas
+## Target Personas (Deep Profiles)
 
 {% for p in personas %}
-- **{{ p.name }}** ({{ p.layer }}{% if p.decision_role %} · {{ p.decision_role }}{% endif %}{% if p.funnel_stage %} · funnel: {{ p.funnel_stage }}{% endif %}): {{ p.value_proposition }}
-{% if p.preferred_channels %}- Preferred channels: {{ p.preferred_channels | join(', ') }}{% endif %}
-{% if p.avoid_channels %}- Avoid channels: {{ p.avoid_channels | join(', ') }}{% endif %}
+### {{ p.name }} (ID: {{ p.id }})
+- **Tier**: {{ p.layer }}{% if p.decision_role %} · {{ p.decision_role }}{% endif %}{% if p.funnel_stage %} · Funnel: {{ p.funnel_stage }}{% endif %}{% if p.tech_depth %} · Tech depth: {{ p.tech_depth }}{% endif %}{% if p.decision_weight %} · Decision weight: {{ p.decision_weight }}{% endif %}
+- **Value Proposition**: {{ p.value_proposition or p.vp_headline }}
+{% if p.vp_argument %}- **VP Argument**: {{ p.vp_argument }}{% endif %}
+{% if p.daily_tasks %}- **Daily Tasks**: {{ p.daily_tasks | join('; ') }}{% endif %}
+{% if p.pain_points %}- **Pain Points**: {{ p.pain_points | join('; ') }}{% endif %}
+{% if p.decision_criteria %}- **Decision Criteria**: {{ p.decision_criteria | join('; ') }}{% endif %}
+{% if p.objections %}- **Common Objections**: {{ p.objections | join('; ') }}{% endif %}
+{% if p.search_queries %}- **Search Queries**: {{ p.search_queries | join('; ') }}{% endif %}
+{% if p.info_channels %}- **Info Channels**: {{ p.info_channels | join('; ') }}{% endif %}
+{% if p.preferred_channels %}- **Preferred Channels**: {{ p.preferred_channels | join('; ') }}{% endif %}
+{% if p.avoid_channels %}- **Avoid Channels**: {{ p.avoid_channels | join('; ') }}{% endif %}
+{% if p.vp_competitor_comparison %}- **Competitor Perception**: {% for comp, note in p.vp_competitor_comparison.items() %}{{ comp }}: {{ note }}{% if not loop.last %}; {% endif %}{% endfor %}{% endif %}
 {% endfor %}
+
+---
+
+## Persona Usage Principles
+
+The profiles above are strategic inputs, not a checklist to mechanically map. These 3 principles define what "good strategy" means — but how you achieve it (lead with pain points or decision criteria, dismantle objections first or build awareness first) is your judgment call:
+
+1. **Distinguishability**: If you can swap Persona A's content_brief into Persona B and it still reads as plausible, both have failed to reflect their respective profiles. Different personas should differ in argument angle, technical depth, and narrative tone.
+2. **Evidence grounding**: ST differentiation claims in content_brief should have a visible thread back to that persona's vp_argument / vp_competitor_comparison / pain_points. Extrapolation is fine; fabrication is not.
+3. **Reader recognition**: After writing each content_brief, ask: "Would this persona read this and feel it was written for someone like them?" If the answer is no, rewrite.
 
 ---
 

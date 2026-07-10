@@ -12,12 +12,15 @@
    - P2: 其余所有情况
    注意：P1 使用 OR 条件——只要 strategic_importance 高（≥3）或可争夺且有空间，即为 P1。代码验证将以同样公式重新计算确保一致性。
 6. **渠道尊重受众约束**：content_plan 中某条目的 target_persona 若带有 avoid_channels，该条目的 channel 不得落在其中；优先从 preferred_channels 选择。
+7. **Persona 驱动的内容精度**：每个 content_plan 条目必须体现其 target_persona 的独特性。如果把 Persona A 的 content_brief 换到 Persona B 仍读起来通顺，则两者都不合格——不同 persona 应有不同的论证角度、技术深度和叙事语气。
+8. **目标导向**：Campaign Goal 是整个计划的"北极星"。优先级排序、渠道配比、timeline 节奏、内容叙事角度都应服务于这一目标。例如：新品 launch → 强调认知建立和差异化叙事；防守竞品 → 强调 head-to-head 对比和替代性论证；展会预热 → 强调 introduction 和案例铺垫。如果 Goal 为空，默认以"提升 AI 可见度与差异化认知"为目标。
 
 ---
 
 ## Campaign 背景
 
 - **Campaign**: {{ brief.name }}
+- **商业目标**: {{ brief.goal or '提升 AI 可见度与差异化认知' }}
 - **主题**: {{ brief.topic }}
 - **目标页面**: {{ brief.target_page_url }}
 - **产品/方案**: {{ brief.products | join(', ') }}
@@ -26,13 +29,33 @@
 
 {{ analysis_json }}
 
-## 目标 Persona
+## 目标 Persona（深度画像）
 
 {% for p in personas %}
-- **{{ p.name }}** ({{ p.layer }}{% if p.decision_role %} · {{ p.decision_role }}{% endif %}{% if p.funnel_stage %} · 漏斗: {{ p.funnel_stage }}{% endif %}): {{ p.value_proposition }}
-{% if p.preferred_channels %}- 偏好渠道: {{ p.preferred_channels | join(', ') }}{% endif %}
-{% if p.avoid_channels %}- 回避渠道: {{ p.avoid_channels | join(', ') }}{% endif %}
+### {{ p.name }} (ID: {{ p.id }})
+- **层级**: {{ p.layer }}{% if p.decision_role %} · {{ p.decision_role }}{% endif %}{% if p.funnel_stage %} · 漏斗: {{ p.funnel_stage }}{% endif %}{% if p.tech_depth %} · 技术深度: {{ p.tech_depth }}{% endif %}{% if p.decision_weight %} · 决策权重: {{ p.decision_weight }}{% endif %}
+- **价值主张**: {{ p.value_proposition or p.vp_headline }}
+{% if p.vp_argument %}- **VP 展开**: {{ p.vp_argument }}{% endif %}
+{% if p.daily_tasks %}- **日常工作**: {{ p.daily_tasks | join('；') }}{% endif %}
+{% if p.pain_points %}- **痛点**: {{ p.pain_points | join('；') }}{% endif %}
+{% if p.decision_criteria %}- **决策标准**: {{ p.decision_criteria | join('；') }}{% endif %}
+{% if p.objections %}- **常见疑虑**: {{ p.objections | join('；') }}{% endif %}
+{% if p.search_queries %}- **搜索查询**: {{ p.search_queries | join('；') }}{% endif %}
+{% if p.info_channels %}- **信息渠道**: {{ p.info_channels | join('；') }}{% endif %}
+{% if p.preferred_channels %}- **偏好渠道**: {{ p.preferred_channels | join('；') }}{% endif %}
+{% if p.avoid_channels %}- **回避渠道**: {{ p.avoid_channels | join('；') }}{% endif %}
+{% if p.vp_competitor_comparison %}- **竞品对比认知**: {% for comp, note in p.vp_competitor_comparison.items() %}{{ comp }}: {{ note }}{% if not loop.last %}；{% endif %}{% endfor %}{% endif %}
 {% endfor %}
+
+---
+
+## Persona 画像使用原则
+
+上述画像是你制定内容策略的素材，不是需要逐条映射的检查清单。以下 3 条原则定义了"好策略"的标准，但具体如何达成——用痛点切入还是用决策标准论证、先破疑虑还是先建认知——由你根据具体情境判断：
+
+1. **可区分性**：如果把 Persona A 的 content_brief 换到 Persona B 仍读起来"也对"，则两者都没有真正反映各自画像。不同 persona 应有不同的论证角度、技术深度和叙事语气。
+2. **证据锚定**：content_brief 中的 ST 差异化论点应能从该 persona 的 vp_argument / vp_competitor_comparison / pain_points 中找到对应依据。可发散，但不能凭空。
+3. **读者感知**：每条 content_brief 写完后自问——"这个 persona 读到这段话，会觉得是为自己写的吗？"如果答案是否定的，重写。
 
 ---
 

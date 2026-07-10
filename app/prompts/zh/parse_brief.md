@@ -10,11 +10,12 @@
 | `products` | 核心产品/方案名（数组） | 提取所有产品名、芯片型号、方案名；用逗号分隔 |
 | `keywords` | 期望关联关键词（数组） | 提取所有技术术语、行业关键词；用逗号分隔 |
 | `competitors_known` | 已知竞品（数组） | 提取提到的竞品公司或产品名；用逗号分隔 |
-| `notes` | 补充说明 | 其余所有描述性信息，保留自然语言 |
+| `goal` | Campaign 商业目标 | 提取业务目标描述，如 "新品launch造势"、"防守竞品design-in"、"展会预热"。如未明确提及，根据整体描述推断最可能的目标；完全无法判断则留空 |
+| `notes` | 补充说明 | 其余所有描述性信息（预算、时间线、特殊要求等），保留自然语言 |
 
 ## 提取示例
 
-输入："我要为 ST 的 ZCU 方案做一个 Q3 Campaign，主打 Stellar P3E 和 Stellar G 两颗芯片，目标页面是 https://www.st.com/en/applications/zone-control-unit.html，希望关联关键词包括 ZCU、区域控制器、汽车芯片。竞品主要是 NXP S32G 和 Infineon Traveo II。预算 50 万人民币，时间线 3 个月。"
+输入："我要为 ST 的 ZCU 方案做一个 Q3 Campaign，主打 Stellar P3E 和 Stellar G 两颗芯片，目标页面是 https://www.st.com/en/applications/zone-control-unit.html，希望关联关键词包括 ZCU、区域控制器、汽车芯片。竞品主要是 NXP S32G 和 Infineon Traveo II。这个 campaign 主要是为了配合年底的 ZCU 新品发布造势，预算 50 万人民币，时间线 3 个月。"
 
 输出：
 ```json
@@ -25,6 +26,7 @@
   "products": ["Stellar P3E", "Stellar G"],
   "keywords": ["ZCU", "区域控制器", "汽车芯片"],
   "competitors_known": ["NXP S32G", "Infineon Traveo II"],
+  "goal": "配合年底 ZCU 新品发布造势",
   "notes": "预算 50 万人民币，时间线 3 个月。"
 }
 ```

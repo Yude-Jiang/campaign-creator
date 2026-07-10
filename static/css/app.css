@@ -17,7 +17,8 @@
   --amber: #E39A00;
   --green: #1B9E77;
   --radius: 8px;
-  --shadow: 0 2px 8px rgba(3, 35, 75, 0.08);
+  --shadow: 0 2px 12px rgba(3, 35, 75, 0.09);
+  --shadow-hover: 0 8px 36px rgba(3, 35, 75, 0.16);
 }
 
 * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -163,9 +164,9 @@ body {
   font-size: 13px;
   font-weight: 600;
   padding: 9px 20px;
-  border-radius: 6px;
+  border-radius: 100px;
   cursor: pointer;
-  transition: all 0.15s;
+  transition: all 0.18s ease;
   border: 1px solid transparent;
   display: inline-flex;
   align-items: center;
@@ -191,11 +192,13 @@ body {
 /* ── Cards ── */
 .card {
   background: var(--white);
-  border: 1px solid var(--line);
-  border-radius: 12px;
+  border-radius: 8px;
+  box-shadow: var(--shadow);
   overflow: hidden;
   margin-bottom: 20px;
+  transition: box-shadow 0.18s ease;
 }
+.card:hover { box-shadow: var(--shadow-hover); }
 .card-header {
   background: var(--navy);
   color: #fff;
@@ -395,6 +398,21 @@ textarea.form-control { min-height: 80px; resize: vertical; }
   gap: 12px;
 }
 
+/* ── Progress Bar ── */
+.progress-bar-track {
+  background: var(--line);
+  border-radius: 4px;
+  height: 6px;
+  overflow: hidden;
+}
+.progress-bar-fill {
+  height: 100%;
+  border-radius: 4px;
+  transition: width 0.4s ease;
+  background: linear-gradient(90deg, var(--blue), #2a8ec4);
+}
+.progress-bar-fill.complete { background: linear-gradient(90deg, var(--green), #168a60); }
+
 /* ── Form Control Size Variants ── */
 .form-control-sm {
   padding: 6px 10px;
@@ -409,6 +427,8 @@ textarea.form-control { min-height: 80px; resize: vertical; }
 }
 
 /* ── Persona Cards ── */
+.persona-card { box-shadow: var(--shadow); }
+.persona-card:hover { box-shadow: var(--shadow-hover); }
 .persona-card .card-header {
   background: var(--paper);
   color: var(--ink);
@@ -421,6 +441,104 @@ textarea.form-control { min-height: 80px; resize: vertical; }
   text-transform: none;
   letter-spacing: 0;
   margin-bottom: 3px;
+}
+
+/* ── Monospace Metadata ── */
+.mono {
+  font-family: 'Courier New', Courier, monospace;
+  font-size: 0.75rem;
+  color: var(--slate);
+  letter-spacing: 0.02em;
+}
+
+/* ── Page Entry Animation ── */
+@keyframes fadeUp {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.fade-up1 { animation: fadeUp 0.3s ease both; }
+.fade-up2 { animation: fadeUp 0.3s ease 0.08s both; }
+.fade-up3 { animation: fadeUp 0.3s ease 0.16s both; }
+.fade-up4 { animation: fadeUp 0.3s ease 0.24s both; }
+.fade-up5 { animation: fadeUp 0.3s ease 0.32s both; }
+.fade-up6 { animation: fadeUp 0.3s ease 0.40s both; }
+.fade-up7 { animation: fadeUp 0.3s ease 0.48s both; }
+
+/* ── Plan Mini-Nav ── */
+.plan-mini-nav {
+  display: flex;
+  gap: 0;
+  flex-wrap: wrap;
+  position: sticky;
+  top: 110px;
+  z-index: 50;
+  background: var(--paper);
+  padding: 8px;
+  border-radius: 8px;
+  margin-bottom: 16px;
+  box-shadow: 0 1px 4px rgba(3,35,75,.06);
+}
+.plan-mini-nav a {
+  font-size: 0.71875rem;
+  font-weight: 600;
+  color: var(--slate);
+  text-decoration: none;
+  padding: 6px 14px;
+  border-radius: 100px;
+  transition: all 0.18s ease;
+  white-space: nowrap;
+}
+.plan-mini-nav a:hover,
+.plan-mini-nav a.active { background: var(--navy); color: #fff; }
+
+/* ── Goal Banner ── */
+.goal-banner {
+  background: linear-gradient(135deg, var(--navy), var(--navy-light));
+  color: #fff;
+  padding: 12px 20px;
+  border-radius: 8px;
+  margin-bottom: 20px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 13px;
+  box-shadow: var(--shadow);
+}
+.goal-banner .goal-label {
+  font-size: 0.53125rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.13em;
+  opacity: 0.7;
+  white-space: nowrap;
+}
+.goal-banner .goal-text { font-weight: 600; flex: 1; }
+
+/* ── Content Plan Inline Row ── */
+.content-plan-inline {
+  background: var(--paper);
+  border-top: 1px solid var(--line);
+  padding: 12px 14px;
+  font-size: 12px;
+}
+
+/* ── Clickable Table Rows ── */
+.clickable-row { cursor: pointer; }
+.clickable-row:hover td { background: rgba(60,180,230,0.06) !important; }
+
+/* ── Generation Progress ── */
+.gen-progress {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 20px;
+  padding: 12px 18px;
+  background: var(--white);
+  border-radius: 8px;
+  box-shadow: var(--shadow);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--navy);
 }
 
 /* ── Responsive ── */

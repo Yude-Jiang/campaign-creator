@@ -18,6 +18,13 @@
     </p>
   </div>
 
+  {% if campaign.brief.goal %}
+  <div class="goal-banner fade-up1">
+    <span class="goal-label">🎯 {% if language == 'zh' %}Campaign 目标{% else %}Campaign Goal{% endif %}</span>
+    <span class="goal-text">{{ campaign.brief.goal }}</span>
+  </div>
+  {% endif %}
+
   {% if not campaign.plan %}
   <!-- Not yet generated -->
   <div class="card" style="text-align:center;padding:40px;">
@@ -40,8 +47,19 @@
   {% else %}
   {% set plan = campaign.plan %}
 
+  <!-- ═══ Quick-Jump Mini-Nav ═══ -->
+  <nav class="plan-mini-nav fade-up1" id="plan-mini-nav">
+    <a href="#sec-summary">📝 {% if language == 'zh' %}感知总结{% else %}Summary{% endif %}</a>
+    {% if plan.inverted_pyramid %}<a href="#sec-pyramid">🔺 {% if language == 'zh' %}金字塔{% else %}Pyramid{% endif %}</a>{% endif %}
+    {% if plan.competitor_landscape %}<a href="#sec-competitors">🏢 {% if language == 'zh' %}竞品{% else %}Competitors{% endif %}</a>{% endif %}
+    {% if plan.priorities %}<a href="#sec-priorities">🎯 {% if language == 'zh' %}优先级{% else %}Priorities{% endif %}</a>{% endif %}
+    {% if plan.timeline_90days %}<a href="#sec-timeline">📅 {% if language == 'zh' %}时间线{% else %}Timeline{% endif %}</a>{% endif %}
+    {% if plan.monitoring_metrics %}<a href="#sec-metrics">📈 {% if language == 'zh' %}指标{% else %}Metrics{% endif %}</a>{% endif %}
+    {% if plan.content_strategy_summary %}<a href="#sec-strategy">✍️ {% if language == 'zh' %}策略总结{% else %}Strategy{% endif %}</a>{% endif %}
+  </nav>
+
   <!-- ═══ Section 1: AI Perception Summary ═══ -->
-  <div class="card" style="margin-bottom:20px;">
+  <div class="card fade-up1" id="sec-summary" style="margin-bottom:20px;">
     <div class="card-header" style="background:var(--navy);color:#fff;">
       📝 {% if language == 'zh' %}AI 感知现状总结{% else %}AI Perception Summary{% endif %}
     </div>
@@ -52,7 +70,7 @@
 
   <!-- ═══ Section 2: Inverted Pyramid ═══ -->
   {% if plan.inverted_pyramid %}
-  <div class="card" style="margin-bottom:20px;">
+  <div class="card fade-up2" id="sec-pyramid" style="margin-bottom:20px;">
     <div class="card-header">
       🔺 {% if language == 'zh' %}倒金字塔 — ST 召回强度{% else %}Inverted Pyramid — ST Recall Strength{% endif %}
     </div>
@@ -77,7 +95,7 @@
 
   <!-- ═══ Section 3: Competitor Landscape ═══ -->
   {% if plan.competitor_landscape %}
-  <div class="card" style="margin-bottom:20px;">
+  <div class="card fade-up3" id="sec-competitors" style="margin-bottom:20px;">
     <div class="card-header">
       🏢 {% if language == 'zh' %}竞品格局{% else %}Competitor Landscape{% endif %}
     </div>
@@ -103,7 +121,7 @@
 
   <!-- ═══ Section 4: Priority Matrix ═══ -->
   {% if plan.priorities %}
-  <div class="card" style="margin-bottom:20px;">
+  <div class="card fade-up4" id="sec-priorities" style="margin-bottom:20px;">
     <div class="card-header" style="display:flex;justify-content:space-between;align-items:center;">
       <span>🎯 {% if language == 'zh' %}优先级矩阵{% else %}Priority Matrix{% endif %}</span>
       <span style="font-size:12px;font-weight:400;">
@@ -127,15 +145,39 @@
         </thead>
         <tbody>
           {% for p in plan.priorities %}
-          <tr data-priority="{{ p.priority }}" data-si="{{ p.strategic_importance or 0 }}" data-st="{{ p.st_current_strength or 0 }}" data-win="{{ p.winnability or 0 }}">
+          {% set has_content = p.content_plan and p.content_plan|length > 0 %}
+          <tr data-priority="{{ p.priority }}" data-si="{{ p.strategic_importance or 0 }}" data-st="{{ p.st_current_strength or 0 }}" data-win="{{ p.winnability or 0 }}"
+              class="priority-row {{ 'clickable-row' if has_content else '' }}"
+              {{ 'onclick="toggleContentPlan(this)"' if has_content else '' }}
+              {{ 'title="' + ('点击展开内容策略' if language == 'zh' else 'Click to expand content plan') + '"' if has_content else '' }}>
             <td><span class="priority priority-{{ (p.priority or 'p2')|lower }}">{{ p.priority or 'P2' }}</span></td>
-            <td style="max-width:220px;font-size:12px;">{{ p.question_text[:80] if p.question_text else '' }}</td>
+            <td style="max-width:220px;font-size:12px;">
+              {{ p.question_text[:80] if p.question_text else '' }}
+              {% if has_content %}<span style="font-size:10px;color:var(--blue);margin-left:4px;">▶{{ p.content_plan|length }}</span>{% endif %}
+            </td>
             <td>{{ '★' * ((p.strategic_importance or 0)|int) }}</td>
             <td>{{ '★' * ((p.st_current_strength or 0)|int) }}</td>
             <td>{{ '★' * ((p.winnability or 0)|int) }}</td>
             <td><span class="chip chip-moderate" style="font-size:10px;">{{ p.gap_type or '' }}</span></td>
             <td style="max-width:180px;font-size:11px;">{{ p.anchor_point[:60] if p.anchor_point else '' }}</td>
           </tr>
+          {% if has_content %}
+          <tr class="content-plan-detail" style="display:none;">
+            <td colspan="7" style="padding:0;">
+              <div class="content-plan-inline">
+                {% for item in p.content_plan %}
+                <div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid var(--line);flex-wrap:wrap;">
+                  <span style="font-size:10px;font-weight:700;background:var(--blue);color:#fff;padding:1px 7px;border-radius:10px;white-space:nowrap;">{{ item.format or '' }}</span>
+                  <span style="font-size:11px;color:var(--slate);">📡 {{ item.channel or '' }}</span>
+                  <span style="font-size:10px;color:var(--slate);padding:1px 6px;border-radius:4px;background:{{ '#DCFCE7' if item.channel_type == 'organic' else '#FEF3C7' }};">{{ item.channel_type or '' }}</span>
+                  <span style="font-size:11px;color:var(--ink);flex:1;min-width:150px;">{{ item.title_suggestion or '' }}</span>
+                  <span style="font-size:10px;color:var(--slate);">👤 {{ item.target_persona_id or '' }}</span>
+                </div>
+                {% endfor %}
+              </div>
+            </td>
+          </tr>
+          {% endif %}
           {% endfor %}
         </tbody>
       </table>
@@ -145,7 +187,7 @@
 
   <!-- ═══ Section 5: 90-Day Timeline ═══ -->
   {% if plan.timeline_90days %}
-  <div class="card" style="margin-bottom:20px;">
+  <div class="card fade-up5" id="sec-timeline" style="margin-bottom:20px;">
     <div class="card-header">
       📅 {% if language == 'zh' %}90 天执行时间线{% else %}90-Day Execution Timeline{% endif %}
     </div>
@@ -173,7 +215,7 @@
 
   <!-- ═══ Section 6: Monitoring Metrics ═══ -->
   {% if plan.monitoring_metrics %}
-  <div class="card" style="margin-bottom:20px;">
+  <div class="card fade-up6" id="sec-metrics" style="margin-bottom:20px;">
     <div class="card-header">
       📈 {% if language == 'zh' %}监测指标{% else %}Monitoring Metrics{% endif %}
     </div>
@@ -220,7 +262,7 @@
 
   <!-- ═══ Section 7: Content Strategy Summary ═══ -->
   {% if plan.content_strategy_summary %}
-  <div class="card" style="margin-bottom:20px;">
+  <div class="card fade-up7" id="sec-strategy" style="margin-bottom:20px;">
     <div class="card-header">
       ✍️ {% if language == 'zh' %}内容策略总结{% else %}Content Strategy Summary{% endif %}
     </div>
@@ -327,6 +369,19 @@ async function generatePlan() {
 
 function exportPlan(format) {
   window.open('/api/campaigns/{{ campaign_id }}/plan/export/' + format + '?lang={{ language }}', '_blank');
+}
+
+// Expandable content_plan rows
+function toggleContentPlan(row) {
+  const detail = row.nextElementSibling;
+  if (!detail || !detail.classList.contains('content-plan-detail')) return;
+  const isHidden = detail.style.display === 'none';
+  detail.style.display = isHidden ? 'table-row' : 'none';
+  // Update chevron
+  const indicator = row.querySelector('td:nth-child(2) span');
+  if (indicator) {
+    indicator.textContent = isHidden ? '▼' + indicator.textContent.slice(1) : '▶' + indicator.textContent.slice(1);
+  }
 }
 
 // Sortable priority table

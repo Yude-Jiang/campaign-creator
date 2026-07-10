@@ -13,6 +13,7 @@ class CampaignBrief(BaseModel):
     keywords: list[str] = Field(default_factory=list)
     competitors_known: list[str] = Field(default_factory=list)
     materials: list[str] = Field(default_factory=list)
+    goal: str = ""                          # Business objective, e.g. "新品launch造势", "防守NXP design-in"
     notes: str = ""
     language: Literal["zh", "en"] = "zh"
 

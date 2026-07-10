@@ -35,6 +35,7 @@
                 placeholder="{% if language == 'zh' %}
 例如：
 我要为 ST 的 ZCU 方案做一个 2026 Q3 Campaign，主打 Stellar P3E 和 Stellar G 两颗芯片。
+目标是配合年底的 ZCU 新品发布造势。
 目标页面是 https://www.st.com/en/applications/zone-control-unit.html
 希望关联关键词：ZCU、区域控制器、汽车芯片、智能配电
 竞品主要是 NXP S32G 和 Infineon Traveo II
@@ -42,6 +43,7 @@
 {% else %}
 Example:
 Launching a Q3 2026 campaign for ST's ZCU solution featuring Stellar P3E and Stellar G.
+Goal: build awareness ahead of the year-end ZCU product launch.
 Target page: https://www.st.com/en/applications/zone-control-unit.html
 Keywords: ZCU, zone controller, automotive chip, smart power distribution
 Key competitors: NXP S32G, Infineon Traveo II
@@ -143,6 +145,18 @@ Budget $50K, 3-month timeline
                     placeholder="{% if language == 'zh' %}例如：&#10;Stellar P3E 集成 6x ARM Cortex-R52 | P3E datasheet DS14123 rev3 p.12&#10;Stellar G 支持 10Gb TSN | ST ZCU roadmap presentation 2026{% else %}Example:&#10;Stellar P3E integrates 6x ARM Cortex-R52 | P3E datasheet DS14123 rev3 p.12&#10;Stellar G supports 10Gb TSN | ST ZCU roadmap presentation 2026{% endif %}"></textarea>
         </div>
 
+        <!-- Campaign Goal -->
+        <div class="form-group">
+          <label>
+            {% if language == 'zh' %}Campaign 商业目标{% else %}Campaign Business Goal{% endif %}
+          </label>
+          <div class="hint" style="font-size:11px;color:var(--slate);margin-bottom:4px;">
+            {% if language == 'zh' %}这个 Campaign 要达成的业务目的——决定内容策略的"北极星"。例如：新品发布造势、防守竞品抢单、展会预热。{% else %}The business outcome this campaign aims to achieve — the "north star" for content strategy. E.g.: pre-launch buzz, defending against competitor design-ins, trade show warm-up.{% endif %}
+          </div>
+          <input type="text" class="form-control" id="brief-goal"
+                 placeholder="{% if language == 'zh' %}例如：配合年底 ZCU 新品发布造势{% else %}e.g. Build awareness ahead of year-end ZCU product launch{% endif %}">
+        </div>
+
         <!-- Notes (Optional) -->
         <div class="form-group">
           <label>
@@ -216,6 +230,7 @@ async function parseBrief() {
       document.getElementById('brief-competitors').value = comps;
     }
     if (data.notes) document.getElementById('brief-notes').value = data.notes || '';
+    if (data.goal) document.getElementById('brief-goal').value = data.goal || '';
 
     // Show advanced options with filled indicator
     const advanced = document.getElementById('advanced-options');
@@ -246,6 +261,7 @@ async function submitBrief(e) {
   const keywords = document.getElementById('brief-keywords').value.trim();
   const competitors = document.getElementById('brief-competitors').value.trim();
   const notes = document.getElementById('brief-notes').value.trim();
+  const goal = document.getElementById('brief-goal').value.trim();
   const dataAssetsRaw = document.getElementById('brief-data-assets').value.trim();
 
   // Parse data assets: each line is "claim | source"
@@ -269,6 +285,7 @@ async function submitBrief(e) {
     keywords: keywords.split(',').map(s => s.trim()).filter(Boolean),
     competitors_known: competitors.split(',').map(s => s.trim()).filter(Boolean),
     materials: [],
+    goal,
     notes,
     language: '{{ language }}',
   };

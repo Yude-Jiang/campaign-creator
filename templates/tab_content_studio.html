@@ -18,6 +18,13 @@
     </p>
   </div>
 
+  {% if campaign.brief.goal %}
+  <div class="goal-banner fade-up1">
+    <span class="goal-label">🎯 {% if language == 'zh' %}Campaign 目标{% else %}Campaign Goal{% endif %}</span>
+    <span class="goal-text">{{ campaign.brief.goal }}</span>
+  </div>
+  {% endif %}
+
   <!-- ── Data Assets Editor ── -->
   <details style="margin-bottom:20px;" id="data-assets-section">
     <summary style="cursor:pointer;color:var(--blue);font-weight:600;font-size:13px;margin-bottom:8px;">
@@ -61,6 +68,29 @@
   </div>
 
   {% else %}
+  <!-- Generation Progress -->
+  {% set total_items = namespace(count=0) %}
+  {% set generated_items = namespace(count=0) %}
+  {% for p in sorted_priorities %}
+    {% for ci in (p.get('content_plan') or []) %}
+      {% set total_items.count = total_items.count + 1 %}
+      {% if ci.get('generated_content') %}
+        {% set generated_items.count = generated_items.count + 1 %}
+      {% endif %}
+    {% endfor %}
+  {% endfor %}
+  {% if total_items.count > 0 %}
+  <div class="gen-progress fade-up1">
+    <span>📝 {% if language == 'zh' %}内容生成进度{% else %}Generation Progress{% endif %}</span>
+    <span style="font-weight:700;color:var(--blue);">{{ generated_items.count }}/{{ total_items.count }}</span>
+    <div class="progress-bar-track" style="flex:1;">
+      <div class="progress-bar-fill{{ ' complete' if generated_items.count == total_items.count else '' }}"
+           style="width:{{ (generated_items.count / total_items.count * 100)|int }}%;"></div>
+    </div>
+    <span style="font-size:11px;color:var(--slate);">{{ (generated_items.count / total_items.count * 100)|int }}%</span>
+  </div>
+  {% endif %}
+
   <!-- Content cards -->
   {% set priorities = sorted_priorities %}
 

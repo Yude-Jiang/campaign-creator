@@ -17,6 +17,13 @@
     </p>
   </div>
 
+  {% if campaign.brief.goal %}
+  <div class="goal-banner fade-up1">
+    <span class="goal-label">🎯 {% if language == 'zh' %}Campaign 目标{% else %}Campaign Goal{% endif %}</span>
+    <span class="goal-text">{{ campaign.brief.goal }}</span>
+  </div>
+  {% endif %}
+
   <!-- Steps -->
   <div class="card" style="margin-bottom:20px;padding:16px 20px;">
     <div style="font-size:13px;font-weight:700;color:var(--navy);margin-bottom:12px;">
@@ -60,9 +67,10 @@
     </h3>
     <span style="font-size:11px;color:var(--slate);">{{ q_total }} {% if language == 'zh' %}个问题{% else %}questions{% endif %}</span>
   </div>
-  <div style="background:var(--line);border-radius:10px;height:6px;margin-bottom:22px;">
-    <div id="diag-progress-bar" data-recommended="{{ recommended }}" data-diag-count="{{ diag_count }}" style="background:{{ 'var(--green)' if diag_count >= recommended else 'var(--blue)' }};height:100%;border-radius:10px;
-         width:{{ (diag_count / recommended * 100) if recommended > 0 else 0 }}%;max-width:100%;transition:width 0.3s;">
+  <div class="progress-bar-track" style="margin-bottom:22px;">
+    <div id="diag-progress-bar" class="progress-bar-fill{{ ' complete' if diag_count >= recommended else '' }}"
+         data-recommended="{{ recommended }}" data-diag-count="{{ diag_count }}"
+         style="width:{{ (diag_count / recommended * 100) if recommended > 0 else 0 }}%;max-width:100%;">
     </div>
   </div>
 
@@ -181,7 +189,7 @@ async function uploadFile(file, qid) {
       progressBar.dataset.diagCount = currentCount;
       progressBar.style.width = Math.min(currentCount / recommended * 100, 100) + '%';
       if (currentCount >= recommended) {
-        progressBar.style.background = 'var(--green)';
+        progressBar.classList.add('complete');
       }
     }
     // Enable the Next button

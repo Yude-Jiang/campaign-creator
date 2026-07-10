@@ -18,6 +18,13 @@
     </p>
   </div>
 
+  {% if campaign.brief.goal %}
+  <div class="goal-banner fade-up1">
+    <span class="goal-label">🎯 {% if language == 'zh' %}Campaign 目标{% else %}Campaign Goal{% endif %}</span>
+    <span class="goal-text">{{ campaign.brief.goal }}</span>
+  </div>
+  {% endif %}
+
   {% if not campaign.personas %}
   <!-- Not yet generated -->
   <div class="card" style="text-align:center;padding:40px;">
@@ -311,6 +318,18 @@
             <span style="font-size:11px;background:var(--navy);color:#fff;padding:2px 8px;border-radius:8px;white-space:nowrap;">{{ stage_label }}</span>
             {% endif %}
           </div>
+          {% if q.target_persona_ids %}
+          <div style="margin-top:3px;display:flex;gap:4px;flex-wrap:wrap;">
+            {% for tpid in q.target_persona_ids %}
+            {% set tp = campaign.personas | selectattr('id', 'equalto', tpid) | list | first %}
+            {% if tp %}
+            <span style="font-size:9px;background:var(--navy);color:#fff;padding:0 6px;border-radius:8px;opacity:0.7;">👤 {{ tp.name[:16] }}</span>
+            {% else %}
+            <span style="font-size:9px;background:var(--line);color:var(--slate);padding:0 6px;border-radius:8px;">{{ tpid }}</span>
+            {% endif %}
+            {% endfor %}
+          </div>
+          {% endif %}
           {% if q.related_questions %}
           <div style="font-size:10px;color:var(--slate);margin-top:4px;">
             {% if language == 'zh' %}关联：{% else %}Related: {% endif %}
