@@ -205,6 +205,31 @@
       </button>
     </div>
 
+    {% if campaign.grounding_sources %}
+    <details style="margin-bottom:12px;font-size:12px;">
+      <summary style="cursor:pointer;color:var(--blue);font-weight:600;">
+        🌐 {% if language == 'zh' %}Google 搜索引用来源（{{ campaign.grounding_sources|length }} 条）{% else %}Google Search Grounding Sources ({{ campaign.grounding_sources|length }}){% endif %}
+      </summary>
+      <div style="margin-top:8px;padding:8px 12px;background:var(--bg);border-radius:6px;max-height:150px;overflow-y:auto;">
+        {% for src in campaign.grounding_sources[:20] %}
+        <div style="margin-bottom:4px;">
+          <a href="{{ src.url }}" target="_blank" rel="noopener" style="color:var(--blue);word-break:break-all;">
+            🔗 {{ src.title or src.url[:80] }}
+          </a>
+          <span style="color:var(--slate);font-size:10px;display:block;">{{ src.url[:100] }}{% if src.url|length > 100 %}...{% endif %}</span>
+        </div>
+        {% endfor %}
+      </div>
+      <p style="color:var(--slate);font-size:11px;margin-top:4px;">
+        {% if language == 'zh' %}
+        ⓘ 以上为 Gemini 生成 Benchmark Questions 时参考的真实网页来源，可据此验证问题是否基于真实社区讨论。
+        {% else %}
+        ⓘ These are real web pages Gemini referenced when generating benchmark questions. Use them to verify questions reflect actual community discussions.
+        {% endif %}
+      </p>
+    </details>
+    {% endif %}
+
     <div id="questions-container">
       {% for q in campaign.questions %}
       <div class="question-row" id="question-row-{{ q.id }}"

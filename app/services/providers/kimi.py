@@ -41,7 +41,7 @@ class KimiProvider(BaseProvider):
                 max_tokens=max_tokens,
                 temperature=temperature,
             )
-            return resp.choices[0].message.content or ""
+            return {"text": resp.choices[0].message.content or ""}
         except Exception as e:
             logger.error("Kimi API error: %s", e)
             raise

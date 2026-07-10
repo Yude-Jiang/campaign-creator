@@ -186,6 +186,7 @@ async def generate_persona(campaign_id: str):
 
     data["personas"] = result.get("personas", [])
     data["questions"] = result.get("questions", [])
+    data["grounding_sources"] = result.get("grounding_sources", [])
     data["updated_at"] = datetime.now().isoformat()
     save_campaign_json(campaign_id, data)
 
@@ -196,6 +197,7 @@ async def generate_persona(campaign_id: str):
         "questions_count": len(data["questions"]),
         "model": result.get("model", ""),
         "grounding_used": result.get("grounding_used", False),
+        "grounding_sources": result.get("grounding_sources", []),
     }
 
 

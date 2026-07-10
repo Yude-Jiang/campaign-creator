@@ -181,18 +181,21 @@ class LLMRouter:
 
             try:
                 logger.info("Routing task '%s' → %s (grounding=%s)", task, candidate, use_grounding)
-                text = await provider.generate(
+                result = await provider.generate(
                     prompt=full_prompt,
                     system_prompt="",
                     grounding=use_grounding,
                     max_tokens=max_tokens,
                     temperature=temperature,
                 )
+                text = result["text"] if isinstance(result, dict) else result
+                grounding_sources = result.get("grounding_sources", []) if isinstance(result, dict) else []
                 return {
                     "text": text,
                     "model": candidate,
                     "task": task,
                     "grounding_used": use_grounding,
+                    "grounding_sources": grounding_sources,
                 }
             except Exception as exc:
                 last_error = exc

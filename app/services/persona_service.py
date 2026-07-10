@@ -236,6 +236,7 @@ async def generate_personas_and_questions(
     models_used.append(f"questions:{p3_result['model']}")
     if p3_result.get("grounding_used"):
         grounding_used = True
+    grounding_sources = p3_result.get("grounding_sources", [])
 
     # Ensure defaults on all questions
     questions = [_ensure_question_defaults(q) for q in questions]
@@ -246,4 +247,5 @@ async def generate_personas_and_questions(
         "questions": questions,
         "model": " + ".join(models_used),
         "grounding_used": grounding_used,
+        "grounding_sources": grounding_sources,
     }

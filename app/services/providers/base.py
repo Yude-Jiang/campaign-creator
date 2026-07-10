@@ -17,8 +17,12 @@ class BaseProvider(ABC):
         max_tokens: int = 4096,
         temperature: float = 0.7,
         **kwargs: Any,
-    ) -> str:
-        """Send prompt to the LLM and return the response text."""
+    ) -> dict[str, Any]:
+        """Send prompt to the LLM and return {"text": "..."} plus optional metadata.
+
+        Providers may add extra keys (e.g. grounding_sources for Gemini).
+        The only required key is "text".
+        """
         ...
 
     def is_available(self) -> bool:

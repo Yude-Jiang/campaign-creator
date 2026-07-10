@@ -35,7 +35,7 @@ class ClaudeProvider(BaseProvider):
                 system=system_prompt,
                 messages=messages,
             )
-            return resp.content[0].text
+            return {"text": resp.content[0].text}
         except Exception as e:
             logger.error("Claude API error: %s", e)
             raise

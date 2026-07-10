@@ -2,6 +2,9 @@
 
 Uses direct REST calls to Vertex AI when ADC is available (bypasses SDK
 OAuth refresh issues), falls back to google-genai SDK for AI Studio API key.
+
+When grounding is enabled, extracts grounding sources (URLs) from the response
+for downstream citation display.
 """
 
 import asyncio
@@ -21,6 +24,41 @@ VERTEX_URL = (
     "/projects/{project}/locations/us-central1"
     "/publishers/google/models/{model}:generateContent"
 )
+
+
+def _extract_grounding_sources_rest(result: dict) -> list[dict]:
+    """Extract grounding web sources from Vertex AI REST response."""
+    sources: list[dict] = []
+    try:
+        metadata = result.get("candidates", [{}])[0].get("groundingMetadata", {})
+        for chunk in metadata.get("groundingChunks", []):
+            web = chunk.get("web", {})
+            uri = web.get("uri", "")
+            title = web.get("title", "")
+            if uri and uri not in {s["url"] for s in sources}:
+                sources.append({"url": uri, "title": title})
+    except Exception as e:
+        logger.debug("Failed to extract grounding sources from REST response: %s", e)
+    return sources
+
+
+def _extract_grounding_sources_sdk(resp: Any) -> list[dict]:
+    """Extract grounding web sources from google-genai SDK response."""
+    sources: list[dict] = []
+    try:
+        candidate = resp.candidates[0] if resp.candidates else None
+        if candidate and hasattr(candidate, "grounding_metadata") and candidate.grounding_metadata:
+            metadata = candidate.grounding_metadata
+            for chunk in getattr(metadata, "grounding_chunks", []) or []:
+                web = getattr(chunk, "web", None)
+                if web:
+                    uri = getattr(web, "uri", "")
+                    title = getattr(web, "title", "")
+                    if uri and uri not in {s["url"] for s in sources}:
+                        sources.append({"url": uri, "title": title})
+    except Exception as e:
+        logger.debug("Failed to extract grounding sources from SDK response: %s", e)
+    return sources
 
 
 class GeminiProvider(BaseProvider):
@@ -87,8 +125,11 @@ class GeminiProvider(BaseProvider):
         max_tokens: int = 4096,
         temperature: float = 0.7,
         grounding: bool = False,
-    ) -> str:
-        """Generate via Vertex AI REST API using gcloud access token."""
+    ) -> tuple[str, list[dict]]:
+        """Generate via Vertex AI REST API using gcloud access token.
+
+        Returns (text, grounding_sources).
+        """
         token = self._get_gcloud_token()
         if not token:
             raise RuntimeError("Cannot get gcloud access token — run 'gcloud auth login'")
@@ -120,7 +161,9 @@ class GeminiProvider(BaseProvider):
             ctx = ssl.create_default_context()
             resp = urllib.request.urlopen(req, context=ctx, timeout=120)
             result = json.loads(resp.read())
-            return result["candidates"][0]["content"]["parts"][0]["text"]
+            text = result["candidates"][0]["content"]["parts"][0]["text"]
+            sources = _extract_grounding_sources_rest(result) if grounding else []
+            return text, sources
         except Exception as e:
             logger.error("Vertex AI REST call failed: %s", e)
             if hasattr(e, "read"):
@@ -134,8 +177,11 @@ class GeminiProvider(BaseProvider):
         max_tokens: int = 4096,
         temperature: float = 0.7,
         grounding: bool = False,
-    ) -> str:
-        """Generate via Google AI Studio API key."""
+    ) -> tuple[str, list[dict]]:
+        """Generate via Google AI Studio API key.
+
+        Returns (text, grounding_sources).
+        """
         from google import genai
         from google.genai.types import GenerateContentConfig, GoogleSearch, Tool
 
@@ -152,7 +198,8 @@ class GeminiProvider(BaseProvider):
             contents=full_prompt,
             config=GenerateContentConfig(**config_kwargs),
         )
-        return resp.text
+        sources = _extract_grounding_sources_sdk(resp) if grounding else []
+        return resp.text, sources
 
     def _generate_sync(
         self,
@@ -162,8 +209,11 @@ class GeminiProvider(BaseProvider):
         temperature: float = 0.7,
         grounding: bool = False,
         **kwargs: Any,
-    ) -> str:
-        """Pick the best available backend, with fallback chain."""
+    ) -> tuple[str, list[dict]]:
+        """Pick the best available backend, with fallback chain.
+
+        Returns (text, grounding_sources).
+        """
         # Prefer Vertex AI via gcloud REST (most reliable in this environment)
         if settings.google_cloud_project:
             logger.info("Gemini: Vertex AI REST mode (project=%s)", settings.google_cloud_project)
@@ -205,10 +255,13 @@ class GeminiProvider(BaseProvider):
         temperature: float = 0.7,
         grounding: bool = False,
         **kwargs: Any,
-    ) -> str:
-        """Async wrapper — delegates sync call to a thread pool."""
+    ) -> dict[str, Any]:
+        """Async wrapper — delegates sync call to a thread pool.
+
+        Returns {"text": "...", "grounding_sources": [...]} (sources only when grounding=True).
+        """
         try:
-            return await asyncio.to_thread(
+            text, sources = await asyncio.to_thread(
                 self._generate_sync,
                 prompt=prompt,
                 system_prompt=system_prompt,
@@ -217,6 +270,10 @@ class GeminiProvider(BaseProvider):
                 grounding=grounding,
                 **kwargs,
             )
+            result: dict[str, Any] = {"text": text}
+            if sources:
+                result["grounding_sources"] = sources
+            return result
         except Exception as e:
             logger.error("Gemini API error: %s", e)
             raise
