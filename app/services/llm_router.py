@@ -67,10 +67,10 @@ TASK_ROUTING: dict[str, dict[str, Any]] = {
         "fallback": "gemini",
     },
     "content_organic_english": {
-        "primary": "claude",
+        "primary": "gemini",
         "grounding": False,
-        "secondary": "gemini",
-        "fallback": "deepseek",
+        "secondary": "deepseek",
+        "fallback": "kimi",
     },
     "content_paid_baidu_sem": {
         "primary": "deepseek",
@@ -85,10 +85,17 @@ TASK_ROUTING: dict[str, dict[str, Any]] = {
         "fallback": "gemini",
     },
     "content_paid_bing": {
-        "primary": "claude",
+        "primary": "gemini",
         "grounding": False,
-        "secondary": "gemini",
-        "fallback": "deepseek",
+        "secondary": "deepseek",
+        "fallback": "kimi",
+    },
+    # Email nurture (both languages — Gemini for cross-language quality)
+    "content_email": {
+        "primary": "gemini",
+        "grounding": False,
+        "secondary": "deepseek",
+        "fallback": "kimi",
     },
     # Tab 5: Re-check (future)
     "recheck_comparison": {
@@ -157,10 +164,10 @@ class LLMRouter:
         try:
             template = _jinja_env.get_template(template_path)
         except Exception:
-            logger.warning("Template not found: %s, trying fallback", template_path)
-            # Try the other language as fallback
-            fallback_lang = "en" if language == "zh" else "zh"
-            template = _jinja_env.get_template(f"{fallback_lang}/{prompt_name}")
+            raise RuntimeError(
+                f"Prompt template '{prompt_name}' not found for language '{language}'. "
+                f"This task does not support the current language."
+            )
 
         full_prompt = template.render(**variables)
 

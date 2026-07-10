@@ -83,7 +83,7 @@ Each battle card JSON format:
   "gap_type": "open_gap | rival_owned | not_linked | buried_in_pdf",
   "content_plan": [
     {
-      "format": "linkedin_article | bing_ads",
+      "format": "linkedin_article | bing_ads | email_nurture_series",
       "channel": "LinkedIn | Medium | YouTube | Email | Bing Ads | Reddit",
       "channel_type": "organic | paid",
       "target_persona_id": "prac_architect",

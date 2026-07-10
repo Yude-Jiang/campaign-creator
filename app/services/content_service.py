@@ -83,7 +83,7 @@ FORMAT_MAPPING: list[tuple[list[str], str, str, bool]] = [
     (["csdn", "technical_blog"], "content_csdn.md", "content_organic_chinese", False),
     (["bilibili", "b站", "video_script"], "content_bilibili.md", "content_organic_chinese", False),
     (["wechat", "微信", "wechat_article"], "content_wechat.md", "content_organic_chinese", False),
-    (["email", "邮件", "nurture"], "content_email.md", "content_organic_chinese", False),
+    (["email", "邮件", "nurture"], "content_email.md", "content_email", False),
     (["baidu_sem", "baidu_search", "sem", "paid_search"], "content_baidu_sem.md", "content_paid_baidu_sem", True),
     (["baidu_feed", "baidu_info", "feed_ad"], "content_baidu_feed.md", "content_paid_baidu_feed", False),
     (["linkedin"], "content_linkedin.md", "content_organic_english", False),
@@ -249,8 +249,10 @@ def compose_prompt(
     try:
         tmpl = _jinja_env.get_template(template_path)
     except Exception:
-        fallback_lang = "en" if language == "zh" else "zh"
-        tmpl = _jinja_env.get_template(f"{fallback_lang}/{template_name}")
+        raise ValueError(
+            f"Template '{template_name}' not found for language '{language}'. "
+            f"This channel may not support the current campaign language."
+        )
 
     rendered = tmpl.render(**variables)
 
