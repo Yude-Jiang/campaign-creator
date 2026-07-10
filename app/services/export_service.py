@@ -116,13 +116,27 @@ def _format_monitoring_metrics(metrics: list[dict]) -> str:
 
 
 def _format_coverage(plan: dict, campaign_data: dict | None = None) -> str:
-    """Render a coverage disclosure section in markdown."""
+    """Render a coverage disclosure section in markdown.
+
+    Total = all campaign questions (not just plan priorities), so the
+    denominator correctly reflects the full question set rather than
+    appearing to be 100% covered when only a subset is analyzed.
+    """
+    all_questions = (campaign_data or {}).get("questions", [])
+    total = len(all_questions)
     priorities = plan.get("priorities", [])
-    total = len(priorities)
     p0 = sum(1 for p in priorities if p.get("priority") == "P0")
     p1 = sum(1 for p in priorities if p.get("priority") == "P1")
     p2 = sum(1 for p in priorities if p.get("priority") == "P2")
     covered = sum(1 for p in priorities if p.get("content_plan"))
+    # High-value = questions with diagnostic_value == "high"
+    high_value_total = sum(1 for q in all_questions if q.get("diagnostic_value") == "high")
+    high_value_covered = sum(
+        1 for p in priorities
+        if any(q.get("id") == p.get("question_id") and q.get("diagnostic_value") == "high"
+               for q in all_questions)
+        and p.get("content_plan")
+    )
     diagnoses_count = len((campaign_data or {}).get("diagnoses", []))
     metrics_count = len(plan.get("monitoring_metrics", []))
     models = set()
@@ -136,14 +150,24 @@ def _format_coverage(plan: dict, campaign_data: dict | None = None) -> str:
         "",
         f"| Metric | Value |",
         f"|--------|-------|",
-        f"| Total Questions | {total} |",
+        f"| Total Questions (all) | {total} |",
+        f"| In Plan (prioritized) | {len(priorities)} |",
         f"| With Content Strategy | {covered} |",
+        f"| High-Value Covered | {high_value_covered} / {high_value_total} |",
         f"| P0 / P1 / P2 | {p0} / {p1} / {p2} |",
         f"| Diagnosis Files | {diagnoses_count} |",
         f"| Monitoring Targets | {metrics_count} |",
         f"| Target Models | {', '.join(sorted(models)) if models else 'N/A'} |",
         "",
     ]
+    if total > 0 and len(priorities) < total:
+        missing = total - len(priorities)
+        lines.append(
+            f"⚠ {missing} question(s) from the full question set have no plan coverage. "
+            f"Consider uploading additional diagnosis files or reviewing whether these "
+            f"questions are out of scope."
+        )
+        lines.append("")
     return "\n".join(lines)
 
 
@@ -473,12 +497,20 @@ def export_to_html(plan: dict, campaign_data: dict | None = None) -> str:
     else:
         html += "<p><em>No metrics defined.</em></p>"
 
-    # Coverage disclosure
-    total = len(priorities)
+    # Coverage disclosure — use full question set as denominator
+    all_questions = (campaign_data or {}).get("questions", [])
+    total = len(all_questions)
     p0 = sum(1 for p in priorities if p.get("priority") == "P0")
     p1 = sum(1 for p in priorities if p.get("priority") == "P1")
     p2 = sum(1 for p in priorities if p.get("priority") == "P2")
     covered = sum(1 for p in priorities if p.get("content_plan"))
+    high_value_total = sum(1 for q in all_questions if q.get("diagnostic_value") == "high")
+    high_value_covered = sum(
+        1 for p in priorities
+        if any(q.get("id") == p.get("question_id") and q.get("diagnostic_value") == "high"
+               for q in all_questions)
+        and p.get("content_plan")
+    )
     diagnoses_count = len((campaign_data or {}).get("diagnoses", []))
     metrics_count = len(plan.get("monitoring_metrics", []))
     models = set()
@@ -486,16 +518,28 @@ def export_to_html(plan: dict, campaign_data: dict | None = None) -> str:
         for mdl in (m.get("target_models", []) or []):
             models.add(mdl)
 
+    missing_warning = ""
+    if total > 0 and len(priorities) < total:
+        missing = total - len(priorities)
+        missing_warning = (
+            f'<p style="color:#d97706;font-size:12px;margin-top:8px;">'
+            f'⚠ {missing} question(s) from the full set have no plan coverage. '
+            f'Consider uploading additional diagnosis files.</p>'
+        )
+
     html += f"""<h2>7. Plan Coverage</h2>
     <table>
       <tr><th>Metric</th><th>Value</th></tr>
-      <tr><td>Total Questions</td><td>{total}</td></tr>
+      <tr><td>Total Questions (all)</td><td>{total}</td></tr>
+      <tr><td>In Plan (prioritized)</td><td>{len(priorities)}</td></tr>
       <tr><td>With Content Strategy</td><td>{covered}</td></tr>
+      <tr><td>High-Value Covered</td><td>{high_value_covered} / {high_value_total}</td></tr>
       <tr><td>P0 / P1 / P2</td><td>{p0} / {p1} / {p2}</td></tr>
       <tr><td>Diagnosis Files</td><td>{diagnoses_count}</td></tr>
       <tr><td>Monitoring Targets</td><td>{metrics_count}</td></tr>
       <tr><td>Target Models</td><td>{', '.join(sorted(models)) if models else 'N/A'}</td></tr>
-    </table>"""
+    </table>
+    {missing_warning}"""
 
     html += """
   </div>

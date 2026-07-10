@@ -232,12 +232,14 @@
 
   <!-- ═══ Section 7b: Coverage Disclosure ═══ -->
   {% set all_qs = campaign.questions or [] %}
+  {% set total_qs = all_qs|length %}
   {% set p0s = plan.priorities|selectattr('priority','equalto','P0')|list %}
   {% set p1s = plan.priorities|selectattr('priority','equalto','P1')|list %}
   {% set p2s = plan.priorities|selectattr('priority','equalto','P2')|list %}
   {% set covered = plan.priorities|selectattr('content_plan')|selectattr('content_plan','ne',[])|list %}
-  {% set total_actions = plan.timeline_90days|sum(attribute='actions')|list if plan.timeline_90days else [] %}
-  {% set timeline_count = total_actions|length %}
+  {% set high_value_qs = all_qs|selectattr('diagnostic_value','equalto','high')|list %}
+  {% set high_qids = high_value_qs|map(attribute='id')|list %}
+  {% set high_covered = covered|rejectattr('question_id','eq',none)|selectattr('question_id','in',high_qids)|list %}
   <div class="card" style="margin-bottom:20px;background:var(--bg);border:1px solid var(--line);">
     <div class="card-header" style="background:var(--slate);color:#fff;opacity:0.9;">
       📊 {% if language == 'zh' %}计划覆盖披露{% else %}Plan Coverage Disclosure{% endif %}
@@ -245,20 +247,20 @@
     <div class="card-body">
       <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:12px;font-size:12px;">
         <div style="padding:10px;background:var(--paper);border-radius:6px;text-align:center;">
+          <div style="font-size:22px;font-weight:700;color:var(--navy);">{{ total_qs }}</div>
+          <div style="color:var(--slate);">{% if language == 'zh' %}全部问题{% else %}All Questions{% endif %}</div>
+        </div>
+        <div style="padding:10px;background:var(--paper);border-radius:6px;text-align:center;">
           <div style="font-size:22px;font-weight:700;color:var(--navy);">{{ plan.priorities|length }}</div>
-          <div style="color:var(--slate);">{% if language == 'zh' %}问题总数{% else %}Total Questions{% endif %}</div>
+          <div style="color:var(--slate);">{% if language == 'zh' %}已纳入计划{% else %}In Plan{% endif %}</div>
         </div>
         <div style="padding:10px;background:var(--paper);border-radius:6px;text-align:center;">
           <div style="font-size:22px;font-weight:700;color:var(--navy);">{{ covered|length }}</div>
-          <div style="color:var(--slate);">{% if language == 'zh' %}有内容策略{% else %}With Content Plan{% endif %}</div>
+          <div style="color:var(--slate);">{% if language == 'zh' %}有内容策略{% else %}With Content{% endif %}</div>
         </div>
         <div style="padding:10px;background:var(--paper);border-radius:6px;text-align:center;">
-          <div style="font-size:22px;font-weight:700;color:var(--navy);">{{ campaign.diagnoses|length if campaign.diagnoses else 0 }}</div>
-          <div style="color:var(--slate);">{% if language == 'zh' %}诊断文件{% else %}Diagnosis Files{% endif %}</div>
-        </div>
-        <div style="padding:10px;background:var(--paper);border-radius:6px;text-align:center;">
-          <div style="font-size:22px;font-weight:700;color:var(--navy);">{{ plan.monitoring_metrics|length if plan.monitoring_metrics else 0 }}</div>
-          <div style="color:var(--slate);">{% if language == 'zh' %}监测目标{% else %}Monitoring Targets{% endif %}</div>
+          <div style="font-size:22px;font-weight:700;color:var(--navy);">{{ high_covered|length }}/{{ high_value_qs|length }}</div>
+          <div style="color:var(--slate);">{% if language == 'zh' %}高价值覆盖{% else %}High-Value Covered{% endif %}</div>
         </div>
       </div>
       <div style="margin-top:12px;display:flex;gap:8px;flex-wrap:wrap;">
@@ -266,6 +268,11 @@
         {% if p1s %}<span class="priority priority-p1">P1 × {{ p1s|length }}</span>{% endif %}
         {% if p2s %}<span class="priority priority-p2">P2 × {{ p2s|length }}</span>{% endif %}
       </div>
+      {% if total_qs > 0 and plan.priorities|length < total_qs %}
+      <p style="font-size:11px;color:var(--amber);margin-top:8px;">
+        ⚠ {% if language == 'zh' %}{{ total_qs - plan.priorities|length }} 个问题未被计划覆盖——考虑补充上传诊断文件或确认这些问题不在本次 Campaign 范围内。{% else %}{{ total_qs - plan.priorities|length }} question(s) have no plan coverage — consider uploading additional diagnosis files or confirming these are out of scope.{% endif %}
+      </p>
+      {% endif %}
       {% if (p2s|length) > 0 and (p0s|length + p1s|length) == 0 %}
       <p style="font-size:11px;color:var(--amber);margin-top:8px;">
         ⚠ {% if language == 'zh' %}所有问题均为 P2——请确认诊断数据覆盖是否充分。{% else %}All questions are P2 — verify diagnosis coverage is adequate.{% endif %}
