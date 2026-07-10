@@ -144,6 +144,11 @@ async def upload_diagnosis(campaign_id: str, question_id: str, file: UploadFile)
 
     data["diagnoses"] = diagnoses
     data["updated_at"] = datetime.now().isoformat()
+
+    # Freeze questions baseline on first successful diagnosis upload (S2 invariant)
+    if not data.get("questions_frozen_at"):
+        data["questions_frozen_at"] = datetime.now().isoformat()
+
     save_campaign_json(campaign_id, data)
 
     return {"ok": True, "question_id": question_id, "filename": file.filename}
@@ -230,12 +235,30 @@ def update_persona(campaign_id: str, body: PersonaUpdateRequest):
         data["personas"] = list(existing_personas.values())
 
     if body.questions is not None:
+        frozen = bool(data.get("questions_frozen_at"))
         existing_questions = {q.get("id"): q for q in data.get("questions", []) if q.get("id")}
         for incoming in body.questions:
             qid = incoming.get("id", "")
-            if qid and qid in existing_questions:
-                existing_questions[qid].update(incoming)
-            elif qid:
+            if not qid:
+                continue
+            if qid in existing_questions:
+                target = existing_questions[qid]
+                if frozen and not target.get("added_after_baseline"):
+                    # Baseline question frozen: protect sensitive fields
+                    protected = {"text", "text_en", "category", "diagnostic_value"}
+                    touched = protected & set(incoming.keys())
+                    changed = {k for k in touched if incoming.get(k) != target.get(k)}
+                    if changed:
+                        raise HTTPException(
+                            status_code=409,
+                            detail=f"Question {qid} is frozen (baseline locked at "
+                                   f"{data['questions_frozen_at']}). Locked fields: {sorted(changed)}. "
+                                   f"Add a new question instead.",
+                        )
+                target.update(incoming)
+            else:
+                if frozen:
+                    incoming["added_after_baseline"] = True
                 existing_questions[qid] = incoming
         data["questions"] = list(existing_questions.values())
 
@@ -243,6 +266,32 @@ def update_persona(campaign_id: str, body: PersonaUpdateRequest):
     save_campaign_json(campaign_id, data)
 
     return {"ok": True, "campaign_id": campaign_id}
+
+
+@router.delete("/campaigns/{campaign_id}/questions/{question_id}")
+def delete_question(campaign_id: str, question_id: str):
+    """Delete a question. Baseline questions (frozen, not added_after_baseline) are protected."""
+    data = load_campaign_json(campaign_id)
+    if not data:
+        raise HTTPException(status_code=404, detail="Campaign not found")
+
+    questions = data.get("questions", [])
+    target = next((q for q in questions if q.get("id") == question_id), None)
+    if not target:
+        raise HTTPException(status_code=404, detail=f"Question {question_id} not found")
+
+    frozen = bool(data.get("questions_frozen_at"))
+    if frozen and not target.get("added_after_baseline"):
+        raise HTTPException(
+            status_code=409,
+            detail=f"Question {question_id} is frozen (baseline locked at "
+                   f"{data['questions_frozen_at']}). Baseline questions cannot be deleted.",
+        )
+
+    data["questions"] = [q for q in questions if q.get("id") != question_id]
+    data["updated_at"] = datetime.now().isoformat()
+    save_campaign_json(campaign_id, data)
+    return {"ok": True, "campaign_id": campaign_id, "deleted": question_id}
 
 
 # ═══════════════════════════════════════════════════════════════

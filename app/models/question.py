@@ -26,3 +26,5 @@ class BenchmarkQuestion(BaseModel):
     search_volume_estimate: str = ""                # High | Medium | Low
     seasonality: str = ""                           # evergreen | trending | seasonal
     related_questions: list[str] = Field(default_factory=list)
+    funnel_stage: str = ""                          # why | what | how — maps to decision chain stage
+    added_after_baseline: bool = False              # True if added after questions_frozen_at was set

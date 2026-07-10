@@ -143,6 +143,8 @@ def _ensure_question_defaults(question: dict) -> dict:
     question.setdefault("search_volume_estimate", "")
     question.setdefault("seasonality", "")
     question.setdefault("related_questions", [])
+    question.setdefault("funnel_stage", "")
+    question.setdefault("added_after_baseline", False)
     return question
 
 

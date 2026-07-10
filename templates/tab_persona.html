@@ -196,6 +196,12 @@
 
   <!-- ── Question CRUD ── -->
   <div style="margin-top:28px;">
+    {% if campaign.questions_frozen_at %}
+    <div style="background:var(--navy);color:#fff;padding:8px 14px;border-radius:8px;margin-bottom:12px;font-size:12px;display:flex;align-items:center;gap:8px;">
+      🔒 {% if language == 'zh' %}问题集已于 {{ campaign.questions_frozen_at[:10] }} 冻结基线（首次诊断上传时）。基线问题不可修改或删除；新增问题将标记为基线外。{% else %}Questions baseline frozen at {{ campaign.questions_frozen_at[:10] }} (first diagnosis upload). Baseline questions are locked; new questions are marked as post-baseline.{% endif %}
+    </div>
+    {% endif %}
+
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
       <h3 style="font-size:16px;color:var(--navy);margin:0;">
         📋 {% if language == 'zh' %}Benchmark Questions（{{ campaign.questions|length }} 个）{% else %}Benchmark Questions ({{ campaign.questions|length }}){% endif %}
@@ -232,23 +238,32 @@
 
     <div id="questions-container">
       {% for q in campaign.questions %}
+      {% set is_baseline_frozen = campaign.questions_frozen_at and not q.added_after_baseline %}
       <div class="question-row" id="question-row-{{ q.id }}"
            style="display:flex;gap:10px;padding:10px 12px;border:1px solid var(--line);border-radius:8px;margin-bottom:8px;align-items:flex-start;">
-        <span style="font-weight:700;color:var(--blue);min-width:28px;padding-top:6px;">{{ q.id }}</span>
+        <span style="font-weight:700;color:var(--blue);min-width:28px;padding-top:6px;">
+          {% if is_baseline_frozen %}🔒{% endif %} {{ q.id }}
+          {% if campaign.questions_frozen_at and q.added_after_baseline %}
+          <span style="font-size:9px;color:var(--slate);background:var(--line);padding:1px 5px;border-radius:8px;display:block;margin-top:2px;">{% if language == 'zh' %}基线外{% else %}Post-base{% endif %}</span>
+          {% endif %}
+        </span>
         <div style="flex:1;">
           <input type="text" class="form-control form-control-sm" value="{{ q.text }}"
                  data-field="text" data-question-id="{{ q.id }}" onblur="scheduleSave()"
-                 style="margin-bottom:4px;font-size:13px;">
+                 style="margin-bottom:4px;font-size:13px;"
+                 {{ 'disabled' if is_baseline_frozen }}>
           <div style="display:flex;gap:8px;align-items:center;">
             <select class="form-control form-control-sm" data-field="category" data-question-id="{{ q.id }}"
-                    onchange="scheduleSave()" style="font-size:11px;width:auto;">
+                    onchange="scheduleSave()" style="font-size:11px;width:auto;"
+                    {{ 'disabled' if is_baseline_frozen }}>
               <option value="category_awareness" {{ 'selected' if q.category == 'category_awareness' }}>{% if language == 'zh' %}品类认知{% else %}Awareness{% endif %}</option>
               <option value="selection" {{ 'selected' if q.category == 'selection' }}>{% if language == 'zh' %}选型{% else %}Selection{% endif %}</option>
               <option value="implementation" {{ 'selected' if q.category == 'implementation' }}>{% if language == 'zh' %}实施{% else %}Implementation{% endif %}</option>
               <option value="cost" {{ 'selected' if q.category == 'cost' }}>{% if language == 'zh' %}成本{% else %}Cost{% endif %}</option>
             </select>
             <select class="form-control form-control-sm" data-field="diagnostic_value" data-question-id="{{ q.id }}"
-                    onchange="scheduleSave()" style="font-size:11px;width:auto;">
+                    onchange="scheduleSave()" style="font-size:11px;width:auto;"
+                    {{ 'disabled' if is_baseline_frozen }}>
               <option value="high" {{ 'selected' if q.diagnostic_value == 'high' }}>High ★</option>
               <option value="medium" {{ 'selected' if q.diagnostic_value == 'medium' }}>Medium</option>
               <option value="low" {{ 'selected' if q.diagnostic_value == 'low' }}>Low</option>
@@ -266,8 +281,10 @@
           </div>
           {% endif %}
         </div>
+        {% if not is_baseline_frozen %}
         <button class="btn btn-secondary" style="font-size:11px;padding:4px 8px;color:var(--red);flex-shrink:0;"
                 onclick="deleteQuestion('{{ q.id }}')">✕</button>
+        {% endif %}
       </div>
       {% endfor %}
     </div>
@@ -358,10 +375,16 @@ async function saveAll() {
     if (personas.length > 0) body.personas = personas;
     if (questions.length > 0) body.questions = questions;
 
-    await apiFetch('/api/campaigns/' + campaignId + '/persona', {
+    const resp = await apiFetch('/api/campaigns/' + campaignId + '/persona', {
       method: 'PUT',
       body: JSON.stringify(body),
     });
+
+    if (!resp.ok && resp.status === 409) {
+      const detail = await resp.json().then(d => d.detail).catch(() => '');
+      alert(detail || 'Some baseline questions are locked and cannot be modified.');
+      return;
+    }
 
     // Flash save indicator
     const indicator = document.getElementById('save-indicator-inline');
@@ -492,11 +515,26 @@ function addQuestion() {
   scheduleSave();
 }
 
-function deleteQuestion(qid) {
+async function deleteQuestion(qid) {
   if (!confirm('{{ "确认删除此问题？" if language == "zh" else "Confirm delete this question?" }}')) return;
-  const row = document.getElementById('question-row-' + qid);
-  if (row) row.remove();
-  scheduleSave();
+
+  const campaignId = '{{ campaign_id }}';
+  try {
+    const resp = await fetch('/api/campaigns/' + campaignId + '/questions/' + qid, {
+      method: 'DELETE',
+    });
+    if (!resp.ok) {
+      const detail = await resp.json().then(d => d.detail).catch(() => 'Delete failed');
+      alert(detail);
+      return;
+    }
+    const row = document.getElementById('question-row-' + qid);
+    if (row) row.remove();
+  } catch (err) {
+    console.warn('Delete failed:', err);
+    alert('Delete request failed. Please try again.');
+  }
+}
 }
 
 // ── Persona Generation (unchanged flow) ──
