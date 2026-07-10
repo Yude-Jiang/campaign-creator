@@ -120,7 +120,7 @@ def advance_tab(campaign_id: str, tab: int):
 
 
 @router.post("/campaigns/{campaign_id}/diagnosis/upload")
-async def upload_diagnosis(campaign_id: str, question_id: str, file: UploadFile):
+async def upload_diagnosis(campaign_id: str, question_id: str = Query(...), file: UploadFile):
     """Upload a single GEO diagnosis file for a question."""
     data = load_campaign_json(campaign_id)
     if not data:
