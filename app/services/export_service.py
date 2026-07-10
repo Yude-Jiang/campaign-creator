@@ -422,16 +422,18 @@ def export_to_html(plan: dict, campaign_data: dict | None = None) -> str:
         html += """<table>
       <tr><th>Priority</th><th>Question</th><th>Strategic</th><th>ST Strength</th><th>Winnability</th><th>Gap Type</th><th>Anchor</th></tr>"""
         for p in priorities:
-            priority = p.get("priority", "P2")
+            priority = (p.get("priority") or "P2")
             badge = f'<span class="badge-{priority.lower()}">{priority}</span>'
+            qtext = (p.get("question_text") or p.get("question_id") or "")
+            anchor_text = (p.get("anchor_point") or "")
             html += (
                 f"<tr><td>{badge}</td>"
-                f"<td>{p.get('question_text', p.get('question_id', ''))[:80]}</td>"
+                f"<td>{qtext[:80]}</td>"
                 f"<td>{p.get('strategic_importance', '-')}</td>"
                 f"<td>{p.get('st_current_strength', '-')}</td>"
                 f"<td>{p.get('winnability', '-')}</td>"
                 f"<td>{p.get('gap_type', '')}</td>"
-                f"<td>{p.get('anchor_point', '')[:80]}</td></tr>"
+                f"<td>{anchor_text[:80]}</td></tr>"
             )
         html += "</table>"
     else:
@@ -442,10 +444,10 @@ def export_to_html(plan: dict, campaign_data: dict | None = None) -> str:
     # Content plan per priority (was missing from HTML export)
     if priorities:
         for p in priorities:
-            priority = p.get("priority", "P2")
+            priority = (p.get("priority") or "P2")
             badge = f'<span class="badge-{priority.lower()}">{priority}</span>'
             qid = p.get("question_id", "")
-            anchor = p.get("anchor_point", "")
+            anchor = (p.get("anchor_point") or "")
             content_plan = p.get("content_plan", [])
             if not content_plan:
                 continue
@@ -457,7 +459,7 @@ def export_to_html(plan: dict, campaign_data: dict | None = None) -> str:
                 channel = cp.get("channel", "")
                 ctype = cp.get("channel_type", "")
                 target = cp.get("target_persona_id", "")
-                title = cp.get("title_suggestion", "")[:60]
+                title = (cp.get("title_suggestion") or "")[:60]
                 html += f"<tr><td>{fmt}</td><td>{channel}</td><td>{ctype}</td><td>{target}</td><td>{title}</td></tr>"
             html += "</table>"
 

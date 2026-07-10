@@ -126,7 +126,7 @@ def list_campaigns() -> list[dict]:
                 data = json.loads(json_path.read_text(encoding="utf-8"))
                 result.append({
                     "campaign_id": d.name,
-                    "name": data.get("brief", {}).get("name", d.name),
+                    "name": (data.get("brief") or {}).get("name", d.name),
                     "updated_at": data.get("updated_at", ""),
                 })
     return result

@@ -92,7 +92,7 @@ def campaign_view(request: Request, campaign_id: str, lang: str = Query("zh")):
             key=lambda p: priority_order.get(str(p.get("priority", "P2")), 99),
         )
         # Build persona lookup map for name resolution
-        persona_map = {p["id"]: p for p in data.get("personas", []) if p.get("id")}
+        persona_map = {p.get("id"): p for p in data.get("personas", []) if p and p.get("id")}
 
         # ── Compute channel-fit warnings (T4.9, transient — never persisted) ──
         from app.services.content_service import check_channel_fit, scan_content_risks

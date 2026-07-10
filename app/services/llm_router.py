@@ -38,6 +38,14 @@ TASK_ROUTING: dict[str, dict[str, Any]] = {
         "secondary": "deepseek",
         "fallback": "kimi",
     },
+    # Utility: brief parsing (decoupled from vp_generation so routing can be
+    # tuned independently — fast/cheap model for structured extraction)
+    "parse_brief": {
+        "primary": "deepseek",
+        "grounding": False,
+        "secondary": "kimi",
+        "fallback": "gemini",
+    },
     # Tab 3: Campaign Plan
     "diagnosis_analysis": {
         "primary": "kimi",

@@ -72,7 +72,7 @@ async def parse_brief(req: ParseBriefRequest):
     from app.utils.json_parser import safe_parse_json
 
     result = await llm_router.route_and_generate(
-        task="vp_generation",  # Use DeepSeek for fast, cost-effective parsing
+        task="parse_brief",
         prompt_name="parse_brief.md",
         variables={"text": req.text},
         language=req.language,
@@ -193,12 +193,12 @@ def diagnosis_status(campaign_id: str):
 
     questions = data.get("questions", [])
     diagnoses = data.get("diagnoses", [])
-    diag_ids = {d["question_id"] for d in diagnoses}
+    diag_ids = {d.get("question_id") for d in diagnoses if d.get("question_id")}
 
     return {
         "total": len(questions),
         "uploaded": len(diag_ids),
-        "missing": [q["id"] for q in questions if q["id"] not in diag_ids],
+        "missing": [q.get("id") for q in questions if q.get("id") and q.get("id") not in diag_ids],
     }
 
 
