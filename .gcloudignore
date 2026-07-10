@@ -2,8 +2,9 @@
 .env
 *.env
 
-# Ignore local data
+# Ignore local data (but keep app/data/ for master persona skeletons)
 data/
+!app/data/
 tmp_*
 
 # Ignore IDE and OS files
