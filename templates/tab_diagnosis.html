@@ -17,81 +17,100 @@
     </p>
   </div>
 
-  <!-- Instructions -->
-  <div class="alert alert-info">
-    <strong>📋 {% if language == 'zh' %}操作步骤：{% else %}Steps:{% endif %}</strong><br>
-    1. {% if language == 'zh' %}打开 <a href="{{ geo_hub_url }}" target="_blank" rel="noopener">GEO-hub-experimental</a>{% else %}Open <a href="{{ geo_hub_url }}" target="_blank" rel="noopener">GEO-hub-experimental</a>{% endif %}<br>
-    2. {% if language == 'zh' %}逐个粘贴下面的 Benchmark Question{% else %}Paste each benchmark question below{% endif %}<br>
-    3. {% if language == 'zh' %}下载诊断结果（建议选择 Markdown 格式）{% else %}Download diagnosis results (Markdown format recommended){% endif %}<br>
-    4. {% if language == 'zh' %}将文件拖入下方对应问题的上传区{% else %}Drop files into the matching question upload areas below{% endif %}
+  <!-- Steps — 2×2 grid with numbered circles -->
+  <div class="card" style="margin-bottom:20px;padding:16px 20px;">
+    <div style="font-size:13px;font-weight:700;color:var(--navy);margin-bottom:12px;">
+      📋 {% if language == 'zh' %}操作步骤{% else %}Steps{% endif %}
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px 24px;">
+      <div style="display:flex;align-items:center;gap:8px;font-size:13px;">
+        <span style="display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:50%;background:var(--blue);color:#fff;font-size:11px;font-weight:700;flex-shrink:0;">1</span>
+        {% if language == 'zh' %}打开{% else %}Open{% endif %}
+        <a href="{{ geo_hub_url }}" target="_blank" rel="noopener" style="font-weight:600;">GEO-hub-experimental ↗</a>
+      </div>
+      <div style="display:flex;align-items:center;gap:8px;font-size:13px;">
+        <span style="display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:50%;background:var(--blue);color:#fff;font-size:11px;font-weight:700;flex-shrink:0;">2</span>
+        {% if language == 'zh' %}逐个粘贴 Benchmark Question{% else %}Paste each benchmark question{% endif %}
+      </div>
+      <div style="display:flex;align-items:center;gap:8px;font-size:13px;">
+        <span style="display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:50%;background:var(--blue);color:#fff;font-size:11px;font-weight:700;flex-shrink:0;">3</span>
+        {% if language == 'zh' %}下载诊断结果（建议 Markdown 格式）{% else %}Download results (Markdown recommended){% endif %}
+      </div>
+      <div style="display:flex;align-items:center;gap:8px;font-size:13px;">
+        <span style="display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:50%;background:var(--blue);color:#fff;font-size:11px;font-weight:700;flex-shrink:0;">4</span>
+        {% if language == 'zh' %}将文件拖入下方对应上传区{% else %}Drop files into the matching upload area below{% endif %}
+      </div>
+    </div>
   </div>
 
-  <!-- Question list with upload slots -->
-  <div style="margin-top: 20px;">
-    {% set diag_count = campaign.diagnoses|length if campaign.diagnoses else 0 %}
-    {% set q_total = campaign.questions|length if campaign.questions else 0 %}
-    {% set recommended = [q_total, 7]|min %}
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
-      <h3 style="font-size:16px;color:var(--navy);margin:0;">
-        {% if language == 'zh' %}诊断问题{% else %}Questions to Diagnose{% endif %}
-      </h3>
-      <span style="font-size:13px;color:var(--slate);">
+  <!-- Progress section -->
+  {% set diag_count = campaign.diagnoses|length if campaign.diagnoses else 0 %}
+  {% set q_total = campaign.questions|length if campaign.questions else 0 %}
+  {% set recommended = [q_total, 7]|min %}
+  <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:10px;">
+    <h3 style="font-size:16px;color:var(--navy);margin:0;">
+      {% if language == 'zh' %}诊断问题{% else %}Questions to Diagnose{% endif %}
+      <span style="font-size:12px;color:var(--slate);font-weight:400;margin-left:8px;">
         {% if language == 'zh' %}
-        已上传 <strong style="color:var(--blue);">{{ diag_count }}</strong> / 建议 {{ recommended }} 个（共 {{ q_total }} 个问题）
+        已上传 <strong style="color:var(--blue);">{{ diag_count }}</strong> / 建议 {{ recommended }}
         {% else %}
-        Uploaded <strong style="color:var(--blue);">{{ diag_count }}</strong> / {{ recommended }} recommended ({{ q_total }} total)
+        Uploaded <strong style="color:var(--blue);">{{ diag_count }}</strong> / {{ recommended }} recommended
         {% endif %}
       </span>
+    </h3>
+    <span style="font-size:11px;color:var(--slate);">{{ q_total }} {% if language == 'zh' %}个问题{% else %}questions{% endif %}</span>
+  </div>
+  <div style="background:var(--line);border-radius:10px;height:6px;margin-bottom:22px;">
+    <div id="diag-progress-bar" style="background:{{ 'var(--green)' if diag_count >= recommended else 'var(--blue)' }};height:100%;border-radius:10px;
+         width:{{ (diag_count / recommended * 100) if recommended > 0 else 0 }}%;max-width:100%;transition:width 0.3s;">
     </div>
-    <!-- Progress bar -->
-    <div style="background:var(--line);border-radius:10px;height:8px;margin-bottom:20px;">
-      <div id="diag-progress-bar" style="background:{{ 'var(--green)' if diag_count >= recommended else 'var(--blue)' }};height:100%;border-radius:10px;
-           width:{{ (diag_count / recommended * 100) if recommended > 0 else 0 }}%;max-width:100%;transition:width 0.3s;">
-      </div>
-    </div>
+  </div>
 
-    {% if not campaign.questions %}
-    <div class="card" style="text-align:center;padding:30px;">
-      <p style="color:var(--slate);">
-        {% if language == 'zh' %}请先在 Tab 1 生成 Benchmark Questions{% else %}Please generate benchmark questions in Tab 1 first{% endif %}
-      </p>
+  {% if not campaign.questions %}
+  <div class="card" style="text-align:center;padding:30px;">
+    <p style="color:var(--slate);">
+      {% if language == 'zh' %}请先在 Tab 1 生成 Benchmark Questions{% else %}Please generate benchmark questions in Tab 1 first{% endif %}
+    </p>
+  </div>
+  {% else %}
+  {% for q in campaign.questions %}
+  <div class="card" style="margin-bottom:10px;" id="q-{{ q.id }}">
+    {# Question text row #}
+    <div style="padding:10px 16px;display:flex;align-items:flex-start;gap:10px;border-bottom:1px solid var(--line);">
+      <span style="font-weight:700;color:var(--blue);font-size:13px;white-space:nowrap;padding-top:1px;">
+        {{ q.id }}{% if q.diagnostic_value == 'high' %} <span style="color:var(--gold);" title="{% if language == 'zh' %}优先诊断{% else %}Priority{% endif %}">★</span>{% endif %}
+      </span>
+      <span style="font-size:13px;flex:1;line-height:1.5;">{{ q.text }}</span>
     </div>
-    {% else %}
-    {% for q in campaign.questions %}
-    <div class="card" style="margin-bottom:12px;" id="q-{{ q.id }}">
-      <div style="padding:12px 16px;display:flex;align-items:center;gap:12px;">
-        <span style="font-weight:700;color:var(--blue);font-size:13px;white-space:nowrap;">Q{{ loop.index }}{% if q.diagnostic_value == 'high' %} <span style="color:var(--gold);" title="{% if language == 'zh' %}优先诊断{% else %}Priority diagnosis{% endif %}">★</span>{% endif %}</span>
-        <span style="font-size:13px;flex:1;">{{ q.text }}</span>
-        <span class="chip chip-{{ 'strong' if q.diagnostic_value == 'high' else 'moderate' if q.diagnostic_value == 'medium' else 'weak' }}">{{ q.diagnostic_value }}</span>
-      </div>
-      <div style="padding:0 16px 14px 48px;">
-        <div class="drop-zone" style="padding:20px;"
-             ondragover="event.preventDefault();this.classList.add('dragover')"
-             ondragleave="this.classList.remove('dragover')"
-             ondrop="handleDrop(event, '{{ q.id }}')">
-          <span style="font-size:24px;">📎</span>
-          <p style="font-size:12px;margin-top:6px;">
-            {% if language == 'zh' %}拖拽 .md 或 .html 文件到此处{% else %}Drag .md or .html file here{% endif %}
-          </p>
-          <input type="file" accept=".md,.html,.htm" style="display:none;"
-                 id="file-input-{{ q.id }}"
-                 onchange="handleFileSelect(this, '{{ q.id }}')">
-          <button class="btn btn-secondary" style="font-size:11px;margin-top:8px;"
-                  onclick="document.getElementById('file-input-{{ q.id }}').click()">
-            {% if language == 'zh' %}浏览文件{% else %}Browse Files{% endif %}
-          </button>
-        </div>
-        <div id="file-status-{{ q.id }}" style="font-size:12px;color:var(--slate);margin-top:6px;">
+    {# Upload row #}
+    <div style="padding:10px 16px 10px 42px;">
+      <div class="drop-zone" style="padding:14px;text-align:center;"
+           ondragover="event.preventDefault();this.classList.add('dragover')"
+           ondragleave="this.classList.remove('dragover')"
+           ondrop="handleDrop(event, '{{ q.id }}')">
+        <input type="file" accept=".md,.html,.htm,.txt" style="display:none;"
+               id="file-input-{{ q.id }}"
+               onchange="handleFileSelect(this, '{{ q.id }}')">
+        <div id="file-status-{{ q.id }}" style="font-size:12px;min-height:18px;">
           {% set diag = campaign.diagnoses | selectattr('question_id', 'equalto', q.id) | list | first %}
           {% if diag %}
-          <span style="color:var(--green);">✅ {{ diag.filename }} — {{ diag.uploaded_at }}</span>
+          <span style="color:var(--green);font-weight:500;">✅ {{ diag.filename }}</span>
+          <span style="color:var(--slate);font-size:10px;display:block;">{{ diag.uploaded_at[:16] }}</span>
+          {% else %}
+          <span style="color:var(--slate);">
+            {% if language == 'zh' %}拖拽文件到此处，或{% else %}Drag file here, or{% endif %}
+            <button class="btn btn-secondary" style="font-size:11px;padding:3px 12px;margin-left:6px;"
+                    onclick="document.getElementById('file-input-{{ q.id }}').click()">
+              {% if language == 'zh' %}浏览文件{% else %}Browse{% endif %}
+            </button>
+          </span>
           {% endif %}
         </div>
       </div>
     </div>
-    {% endfor %}
-    {% endif %}
   </div>
+  {% endfor %}
+  {% endif %}
 
 </div>
 {% endblock %}
@@ -150,7 +169,10 @@ async function uploadFile(file, questionId) {
       throw new Error(errData.detail || 'Upload failed');
     }
     const data = await resp.json();
-    if (statusEl) statusEl.innerHTML = '<span style="color:var(--green);">✅ ' + file.name + '</span>';
+    if (statusEl) {
+      statusEl.innerHTML = '<span style="color:var(--green);font-weight:500;">✅ ' + file.name + '</span>'
+        + '<span style="color:var(--slate);font-size:10px;display:block;">' + new Date().toISOString().slice(0, 16) + '</span>';
+    }
     // Update progress bar
     const progressBar = document.getElementById('diag-progress-bar');
     if (progressBar) {
@@ -172,6 +194,5 @@ async function uploadFile(file, questionId) {
     if (statusEl) statusEl.innerHTML = '<span style="color:var(--red);">❌ ' + err.message + '</span>';
   }
 }
-
 </script>
 {% endblock %}
