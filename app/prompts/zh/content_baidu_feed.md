@@ -22,6 +22,13 @@
 - **锚点**: {{ anchor_point }}
 - **目标页面**: {{ brief.target_page_url }}
 
+{% if data_assets %}
+## 已核实数据资产（量化声明的唯一许可来源）
+{% for a in data_assets %}
+- {{ a.claim }}（来源: {{ a.source }}）
+{% endfor %}
+{% endif %}
+
 ## 百度信息流文案要求
 
 1. 原生广告风格——看起来像一篇有价值的行业内容，而非硬广

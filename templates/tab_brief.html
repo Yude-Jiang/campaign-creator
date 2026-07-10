@@ -131,6 +131,18 @@ Budget $50K, 3-month timeline
                  placeholder="{% if language == 'zh' %}例如：NXP S32G, Infineon AURIX{% else %}e.g. NXP S32G, Infineon AURIX{% endif %}">
         </div>
 
+        <!-- Data Assets (S0 verified facts — optional on Tab 0, editable on Tab 4) -->
+        <div class="form-group">
+          <label>
+            {% if language == 'zh' %}已核实数据资产（可选）{% else %}Verified Data Assets (Optional){% endif %}
+          </label>
+          <div class="hint" style="font-size:11px;color:var(--slate);margin-bottom:4px;">
+            {% if language == 'zh' %}每行一条：声明 | 来源。只有资产中的量化声明会被内容生成引用。{% else %}One per line: claim | source. Only assets listed here will be cited in generated content.{% endif %}
+          </div>
+          <textarea class="form-control" id="brief-data-assets" rows="4"
+                    placeholder="{% if language == 'zh' %}例如：&#10;Stellar P3E 集成 6x ARM Cortex-R52 | P3E datasheet DS14123 rev3 p.12&#10;Stellar G 支持 10Gb TSN | ST ZCU roadmap presentation 2026{% else %}Example:&#10;Stellar P3E integrates 6x ARM Cortex-R52 | P3E datasheet DS14123 rev3 p.12&#10;Stellar G supports 10Gb TSN | ST ZCU roadmap presentation 2026{% endif %}"></textarea>
+        </div>
+
         <!-- Notes (Optional) -->
         <div class="form-group">
           <label>
@@ -234,6 +246,17 @@ async function submitBrief(e) {
   const keywords = document.getElementById('brief-keywords').value.trim();
   const competitors = document.getElementById('brief-competitors').value.trim();
   const notes = document.getElementById('brief-notes').value.trim();
+  const dataAssetsRaw = document.getElementById('brief-data-assets').value.trim();
+
+  // Parse data assets: each line is "claim | source"
+  const dataAssets = dataAssetsRaw ? dataAssetsRaw.split('\n').filter(Boolean).map(function(line) {
+    var parts = line.split('|');
+    return {
+      claim: (parts[0] || '').trim(),
+      source: (parts[1] || '').trim(),
+      unverified_source: !parts[1],
+    };
+  }) : [];
 
   if (!name || !topic || !url || !products || !keywords) {
     alert('{% if language == "zh" %}请填写所有带 * 的必填字段（可使用 AI 解析自动填充）{% else %}Please fill in all required fields marked with * (use AI Parse to auto-fill){% endif %}');
@@ -253,7 +276,7 @@ async function submitBrief(e) {
   try {
     const resp = await apiFetch('/api/campaigns', {
       method: 'POST',
-      body: JSON.stringify({ brief }),
+      body: JSON.stringify({ brief, data_assets: dataAssets }),
     });
     window.location.href = resp.redirect;
   } catch (err) {

@@ -115,6 +115,38 @@ def _format_monitoring_metrics(metrics: list[dict]) -> str:
     return "\n".join(lines)
 
 
+def _format_coverage(plan: dict, campaign_data: dict | None = None) -> str:
+    """Render a coverage disclosure section in markdown."""
+    priorities = plan.get("priorities", [])
+    total = len(priorities)
+    p0 = sum(1 for p in priorities if p.get("priority") == "P0")
+    p1 = sum(1 for p in priorities if p.get("priority") == "P1")
+    p2 = sum(1 for p in priorities if p.get("priority") == "P2")
+    covered = sum(1 for p in priorities if p.get("content_plan"))
+    diagnoses_count = len((campaign_data or {}).get("diagnoses", []))
+    metrics_count = len(plan.get("monitoring_metrics", []))
+    models = set()
+    for m in plan.get("monitoring_metrics", []):
+        for mdl in (m.get("target_models", []) or []):
+            models.add(mdl)
+
+    lines = [
+        "",
+        "## Plan Coverage",
+        "",
+        f"| Metric | Value |",
+        f"|--------|-------|",
+        f"| Total Questions | {total} |",
+        f"| With Content Strategy | {covered} |",
+        f"| P0 / P1 / P2 | {p0} / {p1} / {p2} |",
+        f"| Diagnosis Files | {diagnoses_count} |",
+        f"| Monitoring Targets | {metrics_count} |",
+        f"| Target Models | {', '.join(sorted(models)) if models else 'N/A'} |",
+        "",
+    ]
+    return "\n".join(lines)
+
+
 def export_to_markdown(plan: dict, campaign_data: dict | None = None) -> str:
     """Convert Campaign Plan to a structured Markdown document.
 
@@ -195,18 +227,8 @@ def export_to_markdown(plan: dict, campaign_data: dict | None = None) -> str:
     ])
     lines.append(_format_monitoring_metrics(plan.get("monitoring_metrics", [])))
 
-    # Generation metadata
-    meta = plan.get("_generation_meta", {})
-    if meta:
-        lines.extend([
-            "---",
-            "",
-            "## Generation Info",
-            "",
-            f"- **Analysis Model:** {meta.get('analysis_model', 'N/A')}",
-            f"- **Plan Model:** {meta.get('plan_model', 'N/A')}",
-            f"- **Grounding Used:** {meta.get('analysis_grounding') or meta.get('plan_grounding')}",
-        ])
+    # Coverage disclosure
+    lines.append(_format_coverage(plan, campaign_data))
 
     return "\n".join(lines)
 
@@ -391,7 +413,31 @@ def export_to_html(plan: dict, campaign_data: dict | None = None) -> str:
     else:
         html += "<p><em>No priorities defined.</em></p>"
 
-    html += "<h2>4. 90-Day Timeline</h2>"
+    html += "<h2>4. Content Strategy per Priority</h2>"
+
+    # Content plan per priority (was missing from HTML export)
+    if priorities:
+        for p in priorities:
+            priority = p.get("priority", "P2")
+            badge = f'<span class="badge-{priority.lower()}">{priority}</span>'
+            qid = p.get("question_id", "")
+            anchor = p.get("anchor_point", "")
+            content_plan = p.get("content_plan", [])
+            if not content_plan:
+                continue
+            html += f"<h3>{badge} {qid} &mdash; {anchor[:80] if anchor else ''}</h3>"
+            html += """<table>
+          <tr><th>Format</th><th>Channel</th><th>Type</th><th>Target Persona</th><th>Title</th></tr>"""
+            for cp in content_plan:
+                fmt = cp.get("format", "")
+                channel = cp.get("channel", "")
+                ctype = cp.get("channel_type", "")
+                target = cp.get("target_persona_id", "")
+                title = cp.get("title_suggestion", "")[:60]
+                html += f"<tr><td>{fmt}</td><td>{channel}</td><td>{ctype}</td><td>{target}</td><td>{title}</td></tr>"
+            html += "</table>"
+
+    html += "<h2>5. 90-Day Timeline</h2>"
     timeline = plan.get("timeline_90days", [])
     if timeline:
         for phase in timeline:
@@ -411,7 +457,7 @@ def export_to_html(plan: dict, campaign_data: dict | None = None) -> str:
     else:
         html += "<p><em>No timeline defined.</em></p>"
 
-    html += "<h2>5. Monitoring Metrics</h2>"
+    html += "<h2>6. Monitoring Metrics</h2>"
     metrics = plan.get("monitoring_metrics", [])
     if metrics:
         html += """<table>
@@ -427,15 +473,29 @@ def export_to_html(plan: dict, campaign_data: dict | None = None) -> str:
     else:
         html += "<p><em>No metrics defined.</em></p>"
 
-    # Generation metadata
-    meta_data = plan.get("_generation_meta", {})
-    if meta_data:
-        html += f"""<hr>
-    <p style="font-size:12px;color:var(--slate);">
-      Generated with: Analysis → {meta_data.get('analysis_model', 'N/A')} |
-      Plan → {meta_data.get('plan_model', 'N/A')} |
-      Grounding: {meta_data.get('analysis_grounding') or meta_data.get('plan_grounding')}
-    </p>"""
+    # Coverage disclosure
+    total = len(priorities)
+    p0 = sum(1 for p in priorities if p.get("priority") == "P0")
+    p1 = sum(1 for p in priorities if p.get("priority") == "P1")
+    p2 = sum(1 for p in priorities if p.get("priority") == "P2")
+    covered = sum(1 for p in priorities if p.get("content_plan"))
+    diagnoses_count = len((campaign_data or {}).get("diagnoses", []))
+    metrics_count = len(plan.get("monitoring_metrics", []))
+    models = set()
+    for m in plan.get("monitoring_metrics", []):
+        for mdl in (m.get("target_models", []) or []):
+            models.add(mdl)
+
+    html += f"""<h2>7. Plan Coverage</h2>
+    <table>
+      <tr><th>Metric</th><th>Value</th></tr>
+      <tr><td>Total Questions</td><td>{total}</td></tr>
+      <tr><td>With Content Strategy</td><td>{covered}</td></tr>
+      <tr><td>P0 / P1 / P2</td><td>{p0} / {p1} / {p2}</td></tr>
+      <tr><td>Diagnosis Files</td><td>{diagnoses_count}</td></tr>
+      <tr><td>Monitoring Targets</td><td>{metrics_count}</td></tr>
+      <tr><td>Target Models</td><td>{', '.join(sorted(models)) if models else 'N/A'}</td></tr>
+    </table>"""
 
     html += """
   </div>

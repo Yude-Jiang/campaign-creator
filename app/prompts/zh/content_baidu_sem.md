@@ -22,6 +22,13 @@
 - **目标页面**: {{ brief.target_page_url }}
 - **目标受众**: {{ persona.name if persona else '工程师/决策者' }}
 
+{% if data_assets %}
+## 已核实数据资产（量化声明的唯一许可来源）
+{% for a in data_assets %}
+- {{ a.claim }}（来源: {{ a.source }}）
+{% endfor %}
+{% endif %}
+
 ## 百度 SEM 文案要求
 
 1. 标题 17 字以内，描述 40 字以内（百度搜索广告规范）

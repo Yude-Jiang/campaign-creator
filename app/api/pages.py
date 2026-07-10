@@ -95,9 +95,10 @@ def campaign_view(request: Request, campaign_id: str, lang: str = Query("zh")):
         persona_map = {p["id"]: p for p in data.get("personas", []) if p.get("id")}
 
         # ── Compute channel-fit warnings (T4.9, transient — never persisted) ──
-        from app.services.content_service import check_channel_fit
+        from app.services.content_service import check_channel_fit, scan_content_risks
 
         lang = data.get("language", "zh")
+        data_assets = data.get("data_assets", [])
         for p in sorted_priorities:
             for item in p.get("content_plan", []):
                 pid = item.get("target_persona_id", "")
@@ -110,6 +111,10 @@ def campaign_view(request: Request, campaign_id: str, lang: str = Query("zh")):
                     ) if w
                 ]
                 item["_fit_warning"] = warnings[0] if warnings else ""
+                # ── T2: Risk scan for pre-existing generated content (transient) ──
+                existing_text = item.get("generated_content", "")
+                if existing_text:
+                    item["_risk_scan"] = scan_content_risks(existing_text, data_assets, lang)
 
         extra_context["sorted_priorities"] = sorted_priorities
         extra_context["persona_map"] = persona_map

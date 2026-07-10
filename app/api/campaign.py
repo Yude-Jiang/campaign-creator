@@ -7,7 +7,7 @@ from datetime import datetime
 
 from fastapi import APIRouter, File, HTTPException, Query, UploadFile
 from fastapi.responses import PlainTextResponse, HTMLResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from app.models.campaign import Campaign, CampaignBrief
 from app.utils.file_handler import (
@@ -33,6 +33,7 @@ def _slugify(name: str) -> str:
 
 class CampaignCreateRequest(BaseModel):
     brief: CampaignBrief
+    data_assets: list[dict] | None = None
 
 
 @router.post("/campaigns")
@@ -49,6 +50,7 @@ def create_campaign(req: CampaignCreateRequest):
         campaign_id=campaign_id,
         language=req.brief.language,
         brief=req.brief,
+        data_assets=req.data_assets or [],
         current_tab=1,
     )
 
@@ -385,12 +387,70 @@ def export_plan_html(campaign_id: str, lang: str = Query("zh")):
     return HTMLResponse(content=html)
 
 
+# ── Data Assets (T1) ──
+
+
+class DataAssetsUpdateRequest(BaseModel):
+    data_assets: list[dict] = Field(default_factory=list)
+
+
+@router.put("/campaigns/{campaign_id}/data-assets")
+def update_data_assets(campaign_id: str, body: DataAssetsUpdateRequest):
+    """Replace the full data_assets list."""
+    data = load_campaign_json(campaign_id)
+    if not data:
+        raise HTTPException(status_code=404, detail="Campaign not found")
+    # Add timestamps to any new entries that lack them
+    now = datetime.now().isoformat()
+    for a in body.data_assets:
+        if not a.get("added_at"):
+            a["added_at"] = now
+        if not a.get("verified_by"):
+            a["verified_by"] = "manual"
+    data["data_assets"] = body.data_assets
+    data["updated_at"] = now
+    save_campaign_json(campaign_id, data)
+    return {"ok": True, "count": len(body.data_assets)}
+
+
 # ── Content Studio (Tab 4) ──
 
 
 class ContentGenerateRequest(BaseModel):
     priority_index: int
     content_index: int
+
+
+@router.post("/campaigns/{campaign_id}/content/compose-prompt")
+def compose_content_prompt(campaign_id: str, body: ContentGenerateRequest):
+    """Compose the full rendered prompt for a content item without calling the LLM.
+
+    Returns the exact prompt that would be sent to the model — useful for
+    copying into external tools or iterating on prompts manually.
+    """
+    data = load_campaign_json(campaign_id)
+    if not data:
+        raise HTTPException(status_code=404, detail="Campaign not found")
+
+    from app.services.content_service import compose_prompt
+
+    language = data.get("language", "zh")
+    try:
+        result = compose_prompt(
+            data,
+            priority_index=body.priority_index,
+            content_index=body.content_index,
+            language=language,
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+    return {
+        "ok": True,
+        "prompt": result["prompt"],
+        "template": result["template"],
+        "format": result["format"],
+    }
 
 
 @router.post("/campaigns/{campaign_id}/content/generate")

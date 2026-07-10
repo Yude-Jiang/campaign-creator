@@ -77,7 +77,7 @@
   "st_current_strength": 2,
   "winnability": 4,
   "target_page_url": "{{ brief.target_page_url }}",
-  "anchor_point": "ST 的叙事锚点——一句话说清我们的独特差异化优势",
+  "anchor_point": "ST 的叙事锚点——一句话说清我们的独特差异化优势。必须引用支撑此锚点的具体诊断发现（示例：'诊断 q3 发现 AI 回答 ZCU 选型时仅推荐竞品 X——ST Stellar P3E 的硬件隔离架构应成为此问题的核心叙事锚点'），不可凭空拟定",
   "gap_type": "open_gap | rival_owned | not_linked | buried_in_pdf",
   "content_plan": [
     {
@@ -100,6 +100,8 @@
 - 多个 Persona 共享同一痛点主题时，优先规划一条跨 persona 复用的内容线（一份核心素材 + 按 persona 层级适配深度/渠道），在各自条目的 content_brief 中注明复用关系，避免同一主题重复生产
 - format 使用上述枚举值之一，不要自由发挥
 - **content_brief 质量要求**：必须包含具体竞品名称、ST 具体芯片/方案特性（不要泛泛写"性能更强"或"集成度更高"）、诊断中发现的 AI 认知空白、以及建议的论证角度。这是下游生成模块的编辑指引而非完整 prompt。
+- **rival_owned 策略规则**：gap_type 为 rival_owned 的问题——content_brief 必须指定一个 ST 可定义的差异化语义类目作为内容主叙事（例：以"单芯片 ZCU 方案"类目替代"ZCU 芯片选型挑战者"框架），title_suggestion 不得以竞品对比或"AI 忽略了 X"为框架；竞品名提及仅限具体参数对照场景，不得作为叙事参照系反复回指。
+- **timeline 与 content_plan 一致性**：timeline 中任何涉及内容生产的 action，若渠道属于 format 枚举可生成范围（知乎/CSDN/百度竞价/百度信息流），必须在对应问题的 content_plan 中存在条目（paid 内容按上线周排期，但条目现在就要建）；枚举外渠道（B站/微信/邮件/Webinar/官网）的 action 必须在 description 末尾标注"（需外部制作）"。
 
 ### 4. 90 天时间线 (timeline_90days)
 
@@ -108,8 +110,8 @@
 | 阶段 | 重心 | 典型行动 |
 |------|------|----------|
 | Week 1-2 | 建立权威 | 核心长文、知乎问答、CSDN 技术博客 |
-| Week 3-4 | 扩大触达 | 信息图、短视频脚本、邮件培育启动 |
-| Week 5-8 | 转化加速 | 付费广告上线、案例研究、Webinar |
+| Week 3-4 | 扩大触达 | 知乎问答扩展、CSDN 系列续篇、信息图（需外部制作） |
+| Week 5-8 | 转化加速 | 百度竞价/信息流上线（content_plan 中的 paid 条目）、Webinar（需外部制作） |
 | Week 9-12 | 复测调整 | 复测诊断、策略调整、补充内容 |
 
 每个 Phase 的 JSON 格式：
@@ -129,7 +131,12 @@
 
 ### 5. 监测指标 (monitoring_metrics)
 
-定义复测时的成功标准。为每个 P0/P1 问题设定：
+定义复测时的成功标准。为每个 P0/P1 问题设定。
+
+**目标层级要求（硬性）**：
+- **P0 问题**：`expected_recall_position` 必须为 `"top 3"` 或更高（不可使用 `"top 5"`, `"top 10"`, `"mentioned"`）
+- **P1 问题**：`expected_recall_position` 必须至少为 `"top 5"`（可使用 `"top 3"`, `"top 5"`，不可使用 `"top 10"`, `"mentioned"`）
+- **P2 问题**：`expected_recall_position` 至少为 `"mentioned"`（监控即可）
 
 ```json
 {
@@ -174,7 +181,7 @@
       "st_current_strength": 2,
       "winnability": 4,
       "target_page_url": "{{ brief.target_page_url }}",
-      "anchor_point": "一句话叙事锚点",
+      "anchor_point": "一句话叙事锚点，必须引用支撑此锚点的具体诊断发现",
       "gap_type": "open_gap",
       "content_plan": [
         {

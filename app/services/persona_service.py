@@ -261,6 +261,7 @@ async def generate_personas_and_questions(
         variables={
             "brief": brief,
             "personas": personas,
+            "data_assets": campaign_data.get("data_assets", []),
         },
         language=language,
         max_tokens=8192,

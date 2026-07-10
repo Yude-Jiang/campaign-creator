@@ -5,11 +5,40 @@ routes generation through the LLM router.
 """
 
 import logging
+import re
 from typing import Any
 
 from app.services.llm_router import llm_router
 
 logger = logging.getLogger(__name__)
+
+# ── T2: Pre-publish risk scanning ──
+
+_NUMERIC_CLAIM = re.compile(r"\d+(?:\.\d+)?\s*(?:%|μA|mA|MHz|GHz|Gb|Mb|cm²|万片|万辆|美元|\$)")
+_PENDING_MARK = re.compile(r"\[需核实[^\]]*\]|\[TBD[^\]]*\]|\[To verify[^\]]*\]", re.IGNORECASE)
+
+
+def scan_content_risks(text: str, data_assets: list[dict], language: str = "zh") -> dict:
+    """Return {"pending_marks": int, "numeric_claims": int, "message": str}. Never blocks."""
+    pending = len(_PENDING_MARK.findall(text))
+    numeric = len(_NUMERIC_CLAIM.findall(text))
+    msg = ""
+    if pending or (numeric and not data_assets):
+        if language == "zh":
+            parts = []
+            if pending:
+                parts.append(f"{pending} 处待核实标记")
+            if numeric and not data_assets:
+                parts.append(f"{numeric} 处量化声明但本 campaign 无数据资产")
+            msg = "发布前检查：" + "；".join(parts) + "。请逐条核实替换或删除后再发布。"
+        else:
+            parts = []
+            if pending:
+                parts.append(f"{pending} pending verification markers")
+            if numeric and not data_assets:
+                parts.append(f"{numeric} numeric claims with no data assets in this campaign")
+            msg = "Pre-publish check: " + "; ".join(parts) + ". Verify, replace, or remove each before publishing."
+    return {"pending_marks": pending, "numeric_claims": numeric, "message": msg}
 
 
 # ── Channel-Fit Soft Validation ──
@@ -125,26 +154,15 @@ def _find_question(questions: list[dict], question_id: str) -> str:
     return ""
 
 
-async def generate_content(
+def _build_content_variables(
     campaign_data: dict,
     priority_index: int,
     content_index: int,
-    language: str = "zh",
-) -> dict[str, Any]:
-    """Generate content for a specific content plan item.
-
-    Args:
-        campaign_data: Full campaign dict
-        priority_index: Index into plan.priorities
-        content_index: Index into priorities[pi].content_plan
-        language: "zh" or "en"
+) -> tuple[dict[str, Any], dict, str, str, str, bool]:
+    """Resolve format, build variables, and return everything needed to render the prompt.
 
     Returns:
-        {"text": str, "model": str, "format": str, "template": str}
-
-    Raises:
-        ValueError: If plan, priority, or content item not found
-        RuntimeError: If LLM call fails
+        (variables, content_item, format_str, template_name, task_key, needs_keywords)
     """
     plan = campaign_data.get("plan", {})
     if not plan:
@@ -192,7 +210,6 @@ async def generate_content(
     keywords = brief.get("keywords", [])
 
     # The content_brief from the plan — used as editing guidance
-    # Falls back to deprecated llm_prompt field for backward compat
     content_brief_context = content_item.get("content_brief", "") or content_item.get("llm_prompt", "")
 
     # ── Build template variables ──
@@ -205,8 +222,69 @@ async def generate_content(
     if needs_keywords:
         variables["keywords"] = keywords
 
-    # Inject the plan's content_brief as editing guidance
     variables["content_brief"] = content_brief_context
+    variables["data_assets"] = campaign_data.get("data_assets", [])
+
+    return variables, content_item, format_str, template_name, task_key, needs_keywords
+
+
+def compose_prompt(
+    campaign_data: dict,
+    priority_index: int,
+    content_index: int,
+    language: str = "zh",
+) -> dict[str, Any]:
+    """Compose the full prompt for a content item WITHOUT calling the LLM.
+
+    Returns the rendered prompt as it would be sent to the model, along with
+    metadata about the template and format used.
+    """
+    variables, content_item, format_str, template_name, task_key, _ = \
+        _build_content_variables(campaign_data, priority_index, content_index)
+
+    # Render using the same Jinja2 environment as the LLM router
+    from app.services.llm_router import _jinja_env
+
+    template_path = f"{language}/{template_name}"
+    try:
+        tmpl = _jinja_env.get_template(template_path)
+    except Exception:
+        fallback_lang = "en" if language == "zh" else "zh"
+        tmpl = _jinja_env.get_template(f"{fallback_lang}/{template_name}")
+
+    rendered = tmpl.render(**variables)
+
+    return {
+        "prompt": rendered,
+        "template": template_name,
+        "format": format_str,
+        "language": language,
+    }
+
+
+async def generate_content(
+    campaign_data: dict,
+    priority_index: int,
+    content_index: int,
+    language: str = "zh",
+) -> dict[str, Any]:
+    """Generate content for a specific content plan item via LLM.
+
+    Args:
+        campaign_data: Full campaign dict
+        priority_index: Index into plan.priorities
+        content_index: Index into priorities[pi].content_plan
+        language: "zh" or "en"
+
+    Returns:
+        {"text": str, "model": str, "format": str, "template": str, ...}
+
+    Raises:
+        ValueError: If plan, priority, or content item not found
+        RuntimeError: If LLM call fails
+    """
+    variables, content_item, format_str, template_name, task_key, _ = \
+        _build_content_variables(campaign_data, priority_index, content_index)
 
     logger.info(
         "Generating content: format=%s → template=%s, task=%s, model chain routed",
@@ -217,7 +295,7 @@ async def generate_content(
 
     # ── Channel-fit soft check (T4.9) ──
     channel = content_item.get("channel", "")
-    channel_fit_warning = check_channel_fit(persona, channel, language)
+    channel_fit_warning = check_channel_fit(variables["persona"], channel, language)
 
     # ── Call LLM Router ──
     result = await llm_router.route_and_generate(
@@ -228,10 +306,15 @@ async def generate_content(
         max_tokens=4096,
     )
 
+    # ── T2: Pre-publish risk scan ──
+    data_assets = campaign_data.get("data_assets", [])
+    risk_scan = scan_content_risks(result["text"], data_assets, language)
+
     return {
         "text": result["text"],
         "model": result["model"],
         "format": format_str,
         "template": template_name,
         "channel_fit_warning": channel_fit_warning,
+        "risk_scan": risk_scan,
     }
