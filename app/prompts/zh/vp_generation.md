@@ -6,6 +6,7 @@
 2. **具体到产品**：每个 argument 必须引用具体的产品特性或技术参数，不得泛泛而谈"提升性能、降低成本"。
 3. **差异化**：必须说明与竞品相比的独特优势。如果已知竞品，必须指名对比。
 4. **不出现品牌名**：headline 和 argument 中不要出现 "ST"、"意法半导体"——但在 competitor_comparison 中可以用竞品名字。
+5. **不得编造数据**：不要编造出货量、客户数量、性能百分比、认证状态、市场份额等任何具体数字或事实声明。proof_points 中无真实来源支撑的量化表述必须以 [需核实] 结尾，或改用定性描述。argument 中的"量化收益"仅在 Brief 或输入素材明确提供数字时才可引用具体数值。
 
 ---
 
@@ -64,12 +65,12 @@
 {
   "persona_id": "prac_sys_architect",
   "headline": "一颗芯片搞定 Zone Controller 全部算力需求",
-  "argument": "基于 Cortex-R52+ 锁步双核架构，单芯片集成多路 CAN-FD/LIN 和以太网交换，不再需要外部 SBC 和 PHY。ASIL-D 功能安全认证文档完整交付，从 datasheet 到安全手册一站式提供，将功能安全认证周期从 6 个月压缩到 3 个月。相比竞品 NXP S32G 方案，减少 40% 的外围器件数量和 BOM 成本。",
+  "argument": "基于 Cortex-R52+ 锁步双核架构，单芯片集成多路 CAN-FD/LIN 和以太网交换，不再需要外部 SBC 和 PHY。功能安全认证文档完整交付，从 datasheet 到安全手册一站式提供，可显著压缩功能安全认证周期 [需核实：具体周期数据]。相比竞品 NXP S32G 方案，减少外围器件数量与 BOM 成本 [需核实：具体比例]。",
   "proof_points": [
-    "ISO 26262 ASIL-D 认证完成，安全手册和 FMEDA 报告可直接用于项目认证",
+    "功能安全认证文档（安全手册、FMEDA）交付完整度 [需核实：认证等级与状态]",
     "支持 AUTOSAR Classic + Adaptive 双平台，提供完整的 MCAL 驱动库",
-    "在 NXP S32G 和 Infineon Traveo II 的第三方 Benchmarks 中，唤醒延迟降低 30%",
-    "已有 3 家 Tier-1 量产部署，累计出货超过 500 万片"
+    "唤醒延迟具备竞争优势 [需核实：第三方 benchmark 数据]",
+    "已有 Tier-1 量产部署案例 [需核实：客户数量与出货规模]"
   ],
   "competitor_comparison": {
     "vs_nxp_s32g": "我们的方案集成度更高——无需外部 SBC 和部分 PHY，BOM 减少约 40%。但 NXP 在 AUTOSAR 生态和工具链成熟度上仍有优势。",
@@ -103,3 +104,4 @@
 - `argument`：3-4 句话，100-150 字
 - `proof_points`：至少 3 条
 - `competitor_comparison`：如果已知竞品，至少对比 1 个
+- proof_points 中任何无来源的量化声明必须带 [需核实] 标记——下游内容生成会将无标记数字视为可直接引用的事实
