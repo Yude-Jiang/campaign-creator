@@ -269,7 +269,7 @@
               <option value="low" {{ 'selected' if q.diagnostic_value == 'low' }}>Low</option>
             </select>
             <span style="font-size:10px;color:var(--slate);">
-              {{ q.search_intent or '' }}{% if q.search_volume_estimate %} · {{ q.search_volume_estimate }}{% endif %}
+              {{ q.search_intent or '' }}{% if q.assumed_search_volume or q.search_volume_estimate %} · {{ q.assumed_search_volume or q.search_volume_estimate }}{% endif %}
             </span>
           </div>
           {% if q.related_questions %}

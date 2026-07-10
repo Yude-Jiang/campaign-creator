@@ -140,7 +140,7 @@ def _ensure_question_defaults(question: dict) -> dict:
     question.setdefault("assumed_heat", "")
     question.setdefault("search_intent", "")
     question.setdefault("difficulty_level", "")
-    question.setdefault("search_volume_estimate", "")
+    question.setdefault("assumed_search_volume", question.pop("search_volume_estimate", ""))
     question.setdefault("seasonality", "")
     question.setdefault("related_questions", [])
     question.setdefault("funnel_stage", "")

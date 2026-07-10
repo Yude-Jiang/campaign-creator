@@ -23,7 +23,8 @@ class BenchmarkQuestion(BaseModel):
     assumed_heat: str = ""                          # Assumed discussion heat — not verified
     search_intent: str = ""                         # informational | comparison | transactional
     difficulty_level: str = ""                      # beginner | intermediate | advanced
-    search_volume_estimate: str = ""                # High | Medium | Low
+    assumed_search_volume: str = ""                 # Assumed search volume — not verified
+    search_volume_estimate: str = ""                # DEPRECATED: use assumed_search_volume
     seasonality: str = ""                           # evergreen | trending | seasonal
     related_questions: list[str] = Field(default_factory=list)
     funnel_stage: str = ""                          # why | what | how — maps to decision chain stage

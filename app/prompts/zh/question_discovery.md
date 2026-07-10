@@ -3,9 +3,9 @@
 ## 硬性规则
 
 1. **只输出 JSON**：你的回复必须是一个完整的 ```json 代码块。
-2. **真实搜索词**：每个问题必须是目标受众在搜索引擎或技术社区中实际会输入的措辞，不是营销话术。`assumed_platform` 和 `assumed_heat` 是你基于行业知识的合理假设（标记为 assumed），非验证数据。
+2. **真实搜索词**：每个问题必须是目标受众在搜索引擎或技术社区中实际会输入的措辞，不是营销话术。`assumed_platform`、`assumed_heat`、`assumed_search_volume` 是你基于行业知识的合理假设（标记为 assumed），非验证数据。
 3. **不出现品牌名**：问题中不要出现 "ST"、"意法半导体"、"STM32"——这些问题用于测试 AI 的自然品牌召回能力。
-4. **覆盖所有 Persona**：每个 Persona 至少被 3 个问题覆盖。
+4. **覆盖所有 Persona**：每个 Persona 至少被 2 个问题覆盖。
 
 ---
 
@@ -62,7 +62,7 @@
 
 1. **搜索意图** (`search_intent`): informational / comparison / transactional
 2. **难度层级** (`difficulty_level`): beginner / intermediate / advanced
-3. **搜索量估算** (`search_volume_estimate`): 高 / 中 / 低
+3. **搜索量估算** (`assumed_search_volume`): 高 / 中 / 低（假设值）
 4. **季节性或时效性** (`seasonality`): evergreen / trending / seasonal
    **关联问题** (`related_questions`): 可选，1-2 个相关的 follow-up 问题
 
@@ -100,7 +100,7 @@
       "assumed_heat": "高 | 中 | 低",
       "search_intent": "informational | comparison | transactional",
       "difficulty_level": "beginner | intermediate | advanced",
-      "search_volume_estimate": "高 | 中 | 低",
+      "assumed_search_volume": "高 | 中 | 低",
       "seasonality": "evergreen | trending | seasonal",
       "related_questions": ["关联问题1", "关联问题2"]
     }
