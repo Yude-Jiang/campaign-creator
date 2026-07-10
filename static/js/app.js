@@ -55,8 +55,10 @@ const CampaignState = {
   setLanguage(lang) {
     this.current.language = lang;
     this.save();
-    // Reload page to apply language changes
-    window.location.reload();
+    // Redirect to same page with updated lang param
+    const url = new URL(window.location.href);
+    url.searchParams.set('lang', lang);
+    window.location.href = url.toString();
   },
 
   updateSaveIndicator(saved) {
