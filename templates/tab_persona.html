@@ -548,21 +548,14 @@ function addQuestion() {
 async function deleteQuestion(qid) {
   if (!confirm('{{ "确认删除此问题？" if language == "zh" else "Confirm delete this question?" }}')) return;
 
-  const campaignId = '{{ campaign_id }}';
   try {
-    const resp = await fetch('/api/campaigns/' + campaignId + '/questions/' + qid, {
+    await apiFetch('/api/campaigns/{{ campaign_id }}/questions/' + encodeURIComponent(qid), {
       method: 'DELETE',
     });
-    if (!resp.ok) {
-      const detail = await resp.json().then(d => d.detail).catch(() => 'Delete failed');
-      alert(detail);
-      return;
-    }
     const row = document.getElementById('question-row-' + qid);
     if (row) row.remove();
   } catch (err) {
-    console.warn('Delete failed:', err);
-    alert('Delete request failed. Please try again.');
+    alert(err.message);
   }
 }
 
