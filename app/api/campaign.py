@@ -117,8 +117,8 @@ def update_campaign(campaign_id: str, data: dict):
 @router.put("/campaigns/{campaign_id}/tab")
 def advance_tab(campaign_id: str, tab: int):
     """Advance the campaign to a specific tab (0-3)."""
-    if not 0 <= tab <= 3:
-        raise HTTPException(status_code=400, detail="Tab must be 0-3")
+    if not 0 <= tab <= 4:
+        raise HTTPException(status_code=400, detail="Tab must be 0-4")
     with campaign_lock(campaign_id):
         data = load_campaign_json(campaign_id)
         if not data:
