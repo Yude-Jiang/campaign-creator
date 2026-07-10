@@ -115,6 +115,34 @@ class TestSafeParseJson:
         assert len(result["priorities"]) >= 1
         assert result["priorities"][0]["priority"] == "P0"
 
+    def test_missing_comma_between_fields(self):
+        """Common LLM error: missing comma between key-value pairs."""
+        text = '''```json
+{
+  "ai_perception_summary": "ST has weak presence",
+  "priorities": [
+    {
+      "question_id": "q1",
+      "priority": "P0"
+    }
+  ]
+  "competitor_landscape": [
+    {"competitor": "NXP", "position": "leader"}
+  ]
+}
+```'''
+        result = safe_parse_json(text)
+        assert result["ai_perception_summary"] == "ST has weak presence"
+        assert len(result["priorities"]) == 1
+        assert len(result["competitor_landscape"]) == 1
+        assert result["competitor_landscape"][0]["competitor"] == "NXP"
+
+    def test_missing_comma_between_top_level_keys(self):
+        """Simpler case: two top-level keys missing comma between them."""
+        text = '{"a": 1\n"b": 2}'
+        result = safe_parse_json(text)
+        assert result == {"a": 1, "b": 2}
+
 
 class TestCloseTruncatedJson:
     def test_no_open_brackets_returns_none(self):

@@ -107,6 +107,14 @@ def safe_parse_json(text: str) -> dict:
     except json.JSONDecodeError:
         pass
 
+    # Fix missing commas between key-value pairs (common LLM output error:
+    # a value followed by newline and next key, but comma omitted)
+    cleaned = re.sub(r'(["}\]\d])\s*\n\s*"', r'\1,\n"', cleaned)
+    try:
+        return json.loads(cleaned)
+    except json.JSONDecodeError:
+        pass
+
     # Try truncated JSON recovery
     logger.warning("Attempting truncated JSON recovery...")
     try:

@@ -24,7 +24,7 @@ TASK_ROUTING: dict[str, dict[str, Any]] = {
         "primary": "gemini",
         "grounding": True,
         "secondary": "kimi",
-        "fallback": "claude",
+        "fallback": "deepseek",
     },
     "vp_generation": {
         "primary": "deepseek",
@@ -51,13 +51,13 @@ TASK_ROUTING: dict[str, dict[str, Any]] = {
         "primary": "kimi",
         "grounding": False,
         "secondary": "gemini",
-        "fallback": "claude",
+        "fallback": "deepseek",
     },
     "plan_generation": {
-        "primary": "claude",
+        "primary": "kimi",
         "grounding": False,
-        "secondary": "gemini",
-        "fallback": "deepseek",
+        "secondary": "deepseek",
+        "fallback": "gemini",
     },
     # Tab 4: Content Studio
     "content_organic_chinese": {
@@ -101,14 +101,14 @@ TASK_ROUTING: dict[str, dict[str, Any]] = {
     "recheck_comparison": {
         "primary": "kimi",
         "grounding": False,
-        "secondary": "claude",
-        "fallback": "gemini",
-    },
-    "recheck_attribution": {
-        "primary": "claude",
-        "grounding": False,
         "secondary": "gemini",
         "fallback": "deepseek",
+    },
+    "recheck_attribution": {
+        "primary": "gemini",
+        "grounding": False,
+        "secondary": "deepseek",
+        "fallback": "kimi",
     },
 }
 
@@ -156,7 +156,7 @@ class LLMRouter:
         """
         # 1. Resolve which model to use
         routing = TASK_ROUTING.get(task, {})
-        model_name = model_override or routing.get("primary", "claude")
+        model_name = model_override or routing.get("primary", "gemini")
         grounding = routing.get("grounding", False)
 
         # 2. Load and render the prompt template
