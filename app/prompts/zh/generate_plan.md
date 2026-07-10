@@ -101,7 +101,7 @@
 - format 使用上述枚举值之一，不要自由发挥
 - **content_brief 质量要求**：必须包含具体竞品名称、ST 具体芯片/方案特性（不要泛泛写"性能更强"或"集成度更高"）、诊断中发现的 AI 认知空白、以及建议的论证角度。这是下游生成模块的编辑指引而非完整 prompt。
 - **rival_owned 策略规则**：gap_type 为 rival_owned 的问题——content_brief 必须指定一个 ST 可定义的差异化语义类目作为内容主叙事（例：以"单芯片 ZCU 方案"类目替代"ZCU 芯片选型挑战者"框架），title_suggestion 不得以竞品对比或"AI 忽略了 X"为框架；竞品名提及仅限具体参数对照场景，不得作为叙事参照系反复回指。
-- **timeline 与 content_plan 一致性**：timeline 中任何涉及内容生产的 action，若渠道属于 format 枚举可生成范围（知乎/CSDN/百度竞价/百度信息流），必须在对应问题的 content_plan 中存在条目（paid 内容按上线周排期，但条目现在就要建）；枚举外渠道（B站/微信/邮件/Webinar/官网）的 action 必须在 description 末尾标注"（需外部制作）"。
+- **timeline 与 content_plan 一致性**：timeline 中任何涉及内容生产的 action，若渠道属于 format 枚举可生成范围（知乎/CSDN/B站/微信/邮件/百度竞价/百度信息流），必须在对应问题的 content_plan 中存在条目（paid 内容按上线周排期，但条目现在就要建）；枚举外渠道（Webinar/官网/线下活动/白皮书）的 action 必须在 description 末尾标注"（需外部制作）"。
 
 ### 4. 90 天时间线 (timeline_90days)
 
@@ -109,9 +109,9 @@
 
 | 阶段 | 重心 | 典型行动 |
 |------|------|----------|
-| Week 1-2 | 建立权威 | 核心长文、知乎问答、CSDN 技术博客 |
-| Week 3-4 | 扩大触达 | 知乎问答扩展、CSDN 系列续篇、信息图（需外部制作） |
-| Week 5-8 | 转化加速 | 百度竞价/信息流上线（content_plan 中的 paid 条目）、Webinar（需外部制作） |
+| Week 1-2 | 建立权威 | 核心知乎长文、CSDN 技术博客、B站技术视频 |
+| Week 3-4 | 扩大触达 | 知乎问答扩展、CSDN 系列续篇、微信图文、邮件培育序列 |
+| Week 5-8 | 转化加速 | 百度竞价/信息流上线（content_plan 中的 paid 条目）、Webinar（需外部制作）、官网landing page（需外部制作） |
 | Week 9-12 | 复测调整 | 复测诊断、策略调整、补充内容 |
 
 每个 Phase 的 JSON 格式：
@@ -133,15 +133,15 @@
 
 定义复测时的成功标准。为每个 P0/P1 问题设定。
 
-**目标层级要求（硬性）**：
-- **P0 问题**：`expected_recall_position` 必须为 `"top 3"` 或更高（不可使用 `"top 5"`, `"top 10"`, `"mentioned"`）
-- **P1 问题**：`expected_recall_position` 必须至少为 `"top 5"`（可使用 `"top 3"`, `"top 5"`，不可使用 `"top 10"`, `"mentioned"`）
-- **P2 问题**：`expected_recall_position` 至少为 `"mentioned"`（监控即可）
+**目标层级要求（按阵地强弱分档，非按 priority）**：
+- **ST 当前强阵地**（st_current_strength ≥ 4 或 gap_type 为 `not_linked` 且已有实质内容）：`expected_recall_position` 必须为 `"top 3"` 或 `"top 5"`
+- **ST 中等阵地**（st_current_strength 2-3，或 gap_type 为 `buried_in_pdf`）：`expected_recall_position` 为 `"top 5"` 或 `"top 10"`
+- **ST 弱阵地**（st_current_strength ≤ 1，或 gap_type 为 `open_gap`/`rival_owned`）：`expected_recall_position` 为 `"mentioned"` ——首期目标为"被提及"即成功，激进 KPI 对弱阵地无意义
 
 ```json
 {
   "question_id": "q1",
-  "expected_recall_position": "top 3 | top 5 | top 10 | mentioned",
+  "expected_recall_position": "mentioned",
   "associated_keywords": ["关键词1", "关键词2"],
   "target_models": ["DeepSeek", "Kimi", "Doubao", "Qwen"],
   "notes": "额外说明（可选）——如特定查询方式、需关注的竞品动向"

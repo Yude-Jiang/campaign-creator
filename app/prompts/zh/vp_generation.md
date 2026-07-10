@@ -79,7 +79,7 @@
     "已有 Tier-1 量产部署案例 [需核实：客户数量与出货规模]"
   ],
   "competitor_comparison": {
-    "vs_nxp_s32g": "我们的方案集成度更高——无需外部 SBC 和部分 PHY，BOM 减少约 40%。但 NXP 在 AUTOSAR 生态和工具链成熟度上仍有优势。",
+    "vs_nxp_s32g": "我们的方案集成度更高——无需外部 SBC 和部分 PHY [需核实：BOM 差异]，在功能安全文档完整度上有差异化优势。但 NXP 在 AUTOSAR 生态和工具链成熟度上仍有优势。",
     "vs_infineon_traveo": "功能安全文档完整度是我们的差异化优势。Infineon 在车身域有更多参考设计，但 ZCU 场景下我们的集成度更高。"
   }
 }

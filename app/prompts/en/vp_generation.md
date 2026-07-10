@@ -73,7 +73,7 @@ For each persona, build a complete value proposition across four dimensions:
     "Tier-1 mass production deployment cases [to be verified: customer count and shipment scale]"
   ],
   "competitor_comparison": {
-    "vs_nxp_s32g": "Our solution has higher integration — no external SBC and some PHY needed, BOM reduced ~40%. However, NXP still leads in AUTOSAR ecosystem and toolchain maturity.",
+    "vs_nxp_s32g": "Our solution has higher integration — no external SBC and some PHY needed [to verify: BOM difference], with differentiated functional safety documentation completeness. However, NXP still leads in AUTOSAR ecosystem and toolchain maturity.",
     "vs_infineon_traveo": "Functional safety documentation completeness is our differentiator. Infineon has more reference designs in body domain, but for ZCU our integration level is higher."
   }
 }
