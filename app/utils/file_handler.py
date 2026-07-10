@@ -3,11 +3,45 @@
 import json
 import logging
 import re
+import threading
+from contextlib import contextmanager
 from pathlib import Path
 
 from app.core.config import settings
 
 logger = logging.getLogger(__name__)
+
+# Per-campaign locks for serializing concurrent read-modify-write cycles.
+# FastAPI runs sync endpoints in a threadpool and async endpoints on the event
+# loop, so we use threading.Lock (works for both, and the lock is held only
+# for the brief file-I/O window, never across an await).
+_campaign_locks: dict[str, threading.Lock] = {}
+_locks_guard = threading.Lock()  # protects _campaign_locks itself
+
+
+@contextmanager
+def campaign_lock(campaign_id: str):
+    """Context manager that acquires the per-campaign write lock.
+
+    Wrap any read-modify-write cycle with this to prevent two concurrent
+    requests from reading the same state and having the second write
+    silently overwrite the first.
+
+    Usage:
+        with campaign_lock(campaign_id):
+            data = load_campaign_json(campaign_id)
+            data["something"] = new_value
+            save_campaign_json(campaign_id, data)
+    """
+    with _locks_guard:
+        if campaign_id not in _campaign_locks:
+            _campaign_locks[campaign_id] = threading.Lock()
+        lock = _campaign_locks[campaign_id]
+    lock.acquire()
+    try:
+        yield
+    finally:
+        lock.release()
 
 CAMPAIGNS_DIR = Path(settings.data_dir) / "campaigns"
 
@@ -57,10 +91,16 @@ def ensure_campaign_dir(campaign_id: str) -> Path:
 
 
 def save_campaign_json(campaign_id: str, data: dict) -> Path:
-    """Save campaign data as JSON."""
+    """Save campaign data as JSON (atomic write via temp file + rename)."""
     validate_campaign_id(campaign_id)
     path = ensure_campaign_dir(campaign_id) / "campaign.json"
-    path.write_text(json.dumps(data, ensure_ascii=False, indent=2, default=str), encoding="utf-8")
+    tmp_path = path.with_suffix(".tmp")
+    tmp_path.write_text(
+        json.dumps(data, ensure_ascii=False, indent=2, default=str),
+        encoding="utf-8",
+    )
+    # Atomic replace on the same filesystem — no window for a truncated file
+    tmp_path.replace(path)
     logger.info("Saved campaign: %s", path)
     return path
 

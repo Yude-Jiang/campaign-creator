@@ -11,6 +11,7 @@ from pydantic import BaseModel, Field
 
 from app.models.campaign import Campaign, CampaignBrief
 from app.utils.file_handler import (
+    campaign_lock,
     load_campaign_json,
     list_campaigns,
     save_campaign_json,
@@ -41,20 +42,21 @@ def create_campaign(req: CampaignCreateRequest):
     """Create a new campaign from the brief."""
     campaign_id = _slugify(req.brief.name) if req.brief.name else f"campaign-{datetime.now():%Y%m%d-%H%M%S}"
 
-    # Check for duplicate
-    existing = load_campaign_json(campaign_id)
-    if existing:
-        campaign_id = f"{campaign_id}-{datetime.now():%H%M%S}"
+    with campaign_lock(campaign_id):
+        # Check for duplicate under lock (closes TOCTOU window)
+        existing = load_campaign_json(campaign_id)
+        if existing:
+            campaign_id = f"{campaign_id}-{datetime.now():%H%M%S}"
 
-    campaign = Campaign(
-        campaign_id=campaign_id,
-        language=req.brief.language,
-        brief=req.brief,
-        data_assets=req.data_assets or [],
-        current_tab=1,
-    )
+        campaign = Campaign(
+            campaign_id=campaign_id,
+            language=req.brief.language,
+            brief=req.brief,
+            data_assets=req.data_assets or [],
+            current_tab=1,
+        )
 
-    save_campaign_json(campaign_id, campaign.model_dump())
+        save_campaign_json(campaign_id, campaign.model_dump())
     return {"campaign_id": campaign_id, "redirect": f"/campaigns/{campaign_id}"}
 
 
@@ -98,23 +100,32 @@ def get_campaign(campaign_id: str):
 @router.put("/campaigns/{campaign_id}")
 def update_campaign(campaign_id: str, data: dict):
     """Update campaign data (full replace)."""
-    existing = load_campaign_json(campaign_id)
-    if not existing:
-        raise HTTPException(status_code=404, detail="Campaign not found")
-    data["updated_at"] = datetime.now().isoformat()
-    save_campaign_json(campaign_id, data)
+    with campaign_lock(campaign_id):
+        existing = load_campaign_json(campaign_id)
+        if not existing:
+            raise HTTPException(status_code=404, detail="Campaign not found")
+        # Basic validation: require at minimum the structural fields
+        if not isinstance(data, dict):
+            raise HTTPException(status_code=400, detail="Request body must be a JSON object")
+        if "campaign_id" not in data:
+            data["campaign_id"] = campaign_id
+        data["updated_at"] = datetime.now().isoformat()
+        save_campaign_json(campaign_id, data)
     return {"ok": True, "campaign_id": campaign_id}
 
 
 @router.put("/campaigns/{campaign_id}/tab")
 def advance_tab(campaign_id: str, tab: int):
     """Advance the campaign to a specific tab (0-3)."""
-    data = load_campaign_json(campaign_id)
-    if not data:
-        raise HTTPException(status_code=404, detail="Campaign not found")
-    data["current_tab"] = tab
-    data["updated_at"] = datetime.now().isoformat()
-    save_campaign_json(campaign_id, data)
+    if not 0 <= tab <= 3:
+        raise HTTPException(status_code=400, detail="Tab must be 0-3")
+    with campaign_lock(campaign_id):
+        data = load_campaign_json(campaign_id)
+        if not data:
+            raise HTTPException(status_code=404, detail="Campaign not found")
+        data["current_tab"] = tab
+        data["updated_at"] = datetime.now().isoformat()
+        save_campaign_json(campaign_id, data)
     return {"ok": True, "current_tab": tab}
 
 
@@ -124,11 +135,7 @@ def advance_tab(campaign_id: str, tab: int):
 @router.post("/campaigns/{campaign_id}/diagnosis/upload")
 async def upload_diagnosis(campaign_id: str, file: UploadFile = File(...), question_id: str = Query(...)):
     """Upload a single GEO diagnosis file for a question."""
-    data = load_campaign_json(campaign_id)
-    if not data:
-        raise HTTPException(status_code=404, detail="Campaign not found")
-
-    # ── Server-side validation ──
+    # ── Server-side validation (before lock — no campaign data needed) ──
     fname = (file.filename or "").lower()
     allowed_exts = (".md", ".html", ".htm")
     if not any(fname.endswith(ext) for ext in allowed_exts):
@@ -145,29 +152,34 @@ async def upload_diagnosis(campaign_id: str, file: UploadFile = File(...), quest
             detail=f"文件过大（{len(content) / 1024 / 1024:.1f} MB），上限 5 MB | File too large ({len(content) / 1024 / 1024:.1f} MB), limit 5 MB",
         )
 
-    saved_path = save_diagnosis_file(campaign_id, question_id, content, file.filename or f"{question_id}.md")
+    with campaign_lock(campaign_id):
+        data = load_campaign_json(campaign_id)
+        if not data:
+            raise HTTPException(status_code=404, detail="Campaign not found")
 
-    # Update campaign diagnoses list
-    diagnoses = data.get("diagnoses", [])
-    existing_idx = next((i for i, d in enumerate(diagnoses) if d.get("question_id") == question_id), None)
-    entry = {
-        "question_id": question_id,
-        "filename": saved_path.name,  # Use actual saved filename (e.g. "q1.md"), not upload name
-        "uploaded_at": datetime.now().isoformat(),
-    }
-    if existing_idx is not None:
-        diagnoses[existing_idx] = entry
-    else:
-        diagnoses.append(entry)
+        saved_path = save_diagnosis_file(campaign_id, question_id, content, file.filename or f"{question_id}.md")
 
-    data["diagnoses"] = diagnoses
-    data["updated_at"] = datetime.now().isoformat()
+        # Update campaign diagnoses list
+        diagnoses = data.get("diagnoses", [])
+        existing_idx = next((i for i, d in enumerate(diagnoses) if d.get("question_id") == question_id), None)
+        entry = {
+            "question_id": question_id,
+            "filename": saved_path.name,
+            "uploaded_at": datetime.now().isoformat(),
+        }
+        if existing_idx is not None:
+            diagnoses[existing_idx] = entry
+        else:
+            diagnoses.append(entry)
 
-    # Freeze questions baseline on first successful diagnosis upload (S2 invariant)
-    if not data.get("questions_frozen_at"):
-        data["questions_frozen_at"] = datetime.now().isoformat()
+        data["diagnoses"] = diagnoses
+        data["updated_at"] = datetime.now().isoformat()
 
-    save_campaign_json(campaign_id, data)
+        # Freeze questions baseline on first successful diagnosis upload (S2 invariant)
+        if not data.get("questions_frozen_at"):
+            data["questions_frozen_at"] = datetime.now().isoformat()
+
+        save_campaign_json(campaign_id, data)
 
     return {"ok": True, "question_id": question_id, "filename": file.filename}
 
@@ -198,23 +210,31 @@ def diagnosis_status(campaign_id: str):
 @router.post("/campaigns/{campaign_id}/persona/generate")
 async def generate_persona(campaign_id: str):
     """Generate Personas, Value Propositions, and Benchmark Questions via LLM."""
-    data = load_campaign_json(campaign_id)
-    if not data:
-        raise HTTPException(status_code=404, detail="Campaign not found")
+    # Read campaign snapshot under lock
+    with campaign_lock(campaign_id):
+        data = load_campaign_json(campaign_id)
+        if not data:
+            raise HTTPException(status_code=404, detail="Campaign not found")
+        language = data.get("language", "zh")
 
     from app.services.persona_service import generate_personas_and_questions
 
-    language = data.get("language", "zh")
+    # LLM call (no lock held — can take 30-120s)
     result = await generate_personas_and_questions(data, language=language)
 
-    data["personas"] = result.get("personas", [])
-    data["questions"] = result.get("questions", [])
-    data["grounding_sources"] = result.get("grounding_sources", [])
-    data["grounding_used"] = result.get("grounding_used", False)
-    if result.get("master_persona_snapshot"):
-        data["master_persona_snapshot"] = result["master_persona_snapshot"]
-    data["updated_at"] = datetime.now().isoformat()
-    save_campaign_json(campaign_id, data)
+    # Write results under lock
+    with campaign_lock(campaign_id):
+        data = load_campaign_json(campaign_id)
+        if not data:
+            raise HTTPException(status_code=404, detail="Campaign not found")
+        data["personas"] = result.get("personas", [])
+        data["questions"] = result.get("questions", [])
+        data["grounding_sources"] = result.get("grounding_sources", [])
+        data["grounding_used"] = result.get("grounding_used", False)
+        if result.get("master_persona_snapshot"):
+            data["master_persona_snapshot"] = result["master_persona_snapshot"]
+        data["updated_at"] = datetime.now().isoformat()
+        save_campaign_json(campaign_id, data)
 
     return {
         "ok": True,
@@ -239,52 +259,64 @@ def update_persona(campaign_id: str, body: PersonaUpdateRequest):
     Merges by ID — only provided fields are updated; unedited fields preserved.
     Personas/questions with IDs not in the existing list are appended.
     """
-    data = load_campaign_json(campaign_id)
-    if not data:
-        raise HTTPException(status_code=404, detail="Campaign not found")
-
+    # Validate persona entries have required fields
     if body.personas is not None:
-        existing_personas = {p.get("id"): p for p in data.get("personas", []) if p.get("id")}
-        for incoming in body.personas:
-            pid = incoming.get("id", "")
-            if pid and pid in existing_personas:
-                # Merge: update only provided fields, preserve rest
-                existing_personas[pid].update(incoming)
-            elif pid:
-                # New persona with ID
-                existing_personas[pid] = incoming
-        data["personas"] = list(existing_personas.values())
+        for i, p in enumerate(body.personas):
+            if not p.get("id"):
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Persona at index {i} is missing required field 'id'",
+                )
+            if not p.get("name"):
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Persona '{p.get('id')}' is missing required field 'name'",
+                )
 
-    if body.questions is not None:
-        frozen = bool(data.get("questions_frozen_at"))
-        existing_questions = {q.get("id"): q for q in data.get("questions", []) if q.get("id")}
-        for incoming in body.questions:
-            qid = incoming.get("id", "")
-            if not qid:
-                continue
-            if qid in existing_questions:
-                target = existing_questions[qid]
-                if frozen and not target.get("added_after_baseline"):
-                    # Baseline question frozen: protect sensitive fields
-                    protected = {"text", "text_en", "category", "diagnostic_value"}
-                    touched = protected & set(incoming.keys())
-                    changed = {k for k in touched if incoming.get(k) != target.get(k)}
-                    if changed:
-                        raise HTTPException(
-                            status_code=409,
-                            detail=f"Question {qid} is frozen (baseline locked at "
-                                   f"{data['questions_frozen_at']}). Locked fields: {sorted(changed)}. "
-                                   f"Add a new question instead.",
-                        )
-                target.update(incoming)
-            else:
-                if frozen:
-                    incoming["added_after_baseline"] = True
-                existing_questions[qid] = incoming
-        data["questions"] = list(existing_questions.values())
+    with campaign_lock(campaign_id):
+        data = load_campaign_json(campaign_id)
+        if not data:
+            raise HTTPException(status_code=404, detail="Campaign not found")
 
-    data["updated_at"] = datetime.now().isoformat()
-    save_campaign_json(campaign_id, data)
+        if body.personas is not None:
+            existing_personas = {p.get("id"): p for p in data.get("personas", []) if p.get("id")}
+            for incoming in body.personas:
+                pid = incoming.get("id", "")
+                if pid and pid in existing_personas:
+                    existing_personas[pid].update(incoming)
+                elif pid:
+                    existing_personas[pid] = incoming
+            data["personas"] = list(existing_personas.values())
+
+        if body.questions is not None:
+            frozen = bool(data.get("questions_frozen_at"))
+            existing_questions = {q.get("id"): q for q in data.get("questions", []) if q.get("id")}
+            for incoming in body.questions:
+                qid = incoming.get("id", "")
+                if not qid:
+                    continue
+                if qid in existing_questions:
+                    target = existing_questions[qid]
+                    if frozen and not target.get("added_after_baseline"):
+                        protected = {"text", "text_en", "category", "diagnostic_value"}
+                        touched = protected & set(incoming.keys())
+                        changed = {k for k in touched if incoming.get(k) != target.get(k)}
+                        if changed:
+                            raise HTTPException(
+                                status_code=409,
+                                detail=f"Question {qid} is frozen (baseline locked at "
+                                       f"{data['questions_frozen_at']}). Locked fields: {sorted(changed)}. "
+                                       f"Add a new question instead.",
+                            )
+                    target.update(incoming)
+                else:
+                    if frozen:
+                        incoming["added_after_baseline"] = True
+                    existing_questions[qid] = incoming
+            data["questions"] = list(existing_questions.values())
+
+        data["updated_at"] = datetime.now().isoformat()
+        save_campaign_json(campaign_id, data)
 
     return {"ok": True, "campaign_id": campaign_id}
 
@@ -292,26 +324,27 @@ def update_persona(campaign_id: str, body: PersonaUpdateRequest):
 @router.delete("/campaigns/{campaign_id}/questions/{question_id}")
 def delete_question(campaign_id: str, question_id: str):
     """Delete a question. Baseline questions (frozen, not added_after_baseline) are protected."""
-    data = load_campaign_json(campaign_id)
-    if not data:
-        raise HTTPException(status_code=404, detail="Campaign not found")
+    with campaign_lock(campaign_id):
+        data = load_campaign_json(campaign_id)
+        if not data:
+            raise HTTPException(status_code=404, detail="Campaign not found")
 
-    questions = data.get("questions", [])
-    target = next((q for q in questions if q.get("id") == question_id), None)
-    if not target:
-        raise HTTPException(status_code=404, detail=f"Question {question_id} not found")
+        questions = data.get("questions", [])
+        target = next((q for q in questions if q.get("id") == question_id), None)
+        if not target:
+            raise HTTPException(status_code=404, detail=f"Question {question_id} not found")
 
-    frozen = bool(data.get("questions_frozen_at"))
-    if frozen and not target.get("added_after_baseline"):
-        raise HTTPException(
-            status_code=409,
-            detail=f"Question {question_id} is frozen (baseline locked at "
-                   f"{data['questions_frozen_at']}). Baseline questions cannot be deleted.",
-        )
+        frozen = bool(data.get("questions_frozen_at"))
+        if frozen and not target.get("added_after_baseline"):
+            raise HTTPException(
+                status_code=409,
+                detail=f"Question {question_id} is frozen (baseline locked at "
+                       f"{data['questions_frozen_at']}). Baseline questions cannot be deleted.",
+            )
 
-    data["questions"] = [q for q in questions if q.get("id") != question_id]
-    data["updated_at"] = datetime.now().isoformat()
-    save_campaign_json(campaign_id, data)
+        data["questions"] = [q for q in questions if q.get("id") != question_id]
+        data["updated_at"] = datetime.now().isoformat()
+        save_campaign_json(campaign_id, data)
     return {"ok": True, "campaign_id": campaign_id, "deleted": question_id}
 
 
@@ -323,13 +356,16 @@ def delete_question(campaign_id: str, question_id: str):
 @router.post("/campaigns/{campaign_id}/plan/generate")
 async def generate_plan(campaign_id: str):
     """Generate a full Campaign Plan from diagnosis data via LLM."""
-    data = load_campaign_json(campaign_id)
-    if not data:
-        raise HTTPException(status_code=404, detail="Campaign not found")
+    # Read campaign snapshot under lock
+    with campaign_lock(campaign_id):
+        data = load_campaign_json(campaign_id)
+        if not data:
+            raise HTTPException(status_code=404, detail="Campaign not found")
+        language = data.get("language", "zh")
 
     from app.services.plan_service import generate_campaign_plan
 
-    language = data.get("language", "zh")
+    # LLM call (no lock held — can take 60-180s)
     try:
         plan = await generate_campaign_plan(data, language=language)
     except ValueError as e:
@@ -337,9 +373,14 @@ async def generate_plan(campaign_id: str):
     except RuntimeError as e:
         raise HTTPException(status_code=502, detail=str(e))
 
-    data["plan"] = plan
-    data["updated_at"] = datetime.now().isoformat()
-    save_campaign_json(campaign_id, data)
+    # Write results under lock
+    with campaign_lock(campaign_id):
+        data = load_campaign_json(campaign_id)
+        if not data:
+            raise HTTPException(status_code=404, detail="Campaign not found")
+        data["plan"] = plan
+        data["updated_at"] = datetime.now().isoformat()
+        save_campaign_json(campaign_id, data)
 
     return {
         "ok": True,
@@ -397,19 +438,32 @@ class DataAssetsUpdateRequest(BaseModel):
 @router.put("/campaigns/{campaign_id}/data-assets")
 def update_data_assets(campaign_id: str, body: DataAssetsUpdateRequest):
     """Replace the full data_assets list."""
-    data = load_campaign_json(campaign_id)
-    if not data:
-        raise HTTPException(status_code=404, detail="Campaign not found")
-    # Add timestamps to any new entries that lack them
-    now = datetime.now().isoformat()
-    for a in body.data_assets:
-        if not a.get("added_at"):
-            a["added_at"] = now
-        if not a.get("verified_by"):
-            a["verified_by"] = "manual"
-    data["data_assets"] = body.data_assets
-    data["updated_at"] = now
-    save_campaign_json(campaign_id, data)
+    # Validate each entry has at minimum a 'claim' key
+    for i, a in enumerate(body.data_assets):
+        if not isinstance(a, dict):
+            raise HTTPException(
+                status_code=400,
+                detail=f"data_assets[{i}] must be an object",
+            )
+        if "claim" not in a:
+            raise HTTPException(
+                status_code=400,
+                detail=f"data_assets[{i}] is missing required key 'claim'",
+            )
+
+    with campaign_lock(campaign_id):
+        data = load_campaign_json(campaign_id)
+        if not data:
+            raise HTTPException(status_code=404, detail="Campaign not found")
+        now = datetime.now().isoformat()
+        for a in body.data_assets:
+            if not a.get("added_at"):
+                a["added_at"] = now
+            if not a.get("verified_by"):
+                a["verified_by"] = "manual"
+        data["data_assets"] = body.data_assets
+        data["updated_at"] = now
+        save_campaign_json(campaign_id, data)
     return {"ok": True, "count": len(body.data_assets)}
 
 
@@ -456,13 +510,20 @@ def compose_content_prompt(campaign_id: str, body: ContentGenerateRequest):
 @router.post("/campaigns/{campaign_id}/content/generate")
 async def generate_content(campaign_id: str, body: ContentGenerateRequest):
     """Generate content for a specific content plan item via LLM."""
-    data = load_campaign_json(campaign_id)
-    if not data:
-        raise HTTPException(status_code=404, detail="Campaign not found")
+    # Validate indices before acquiring lock
+    if body.priority_index < 0 or body.content_index < 0:
+        raise HTTPException(status_code=400, detail="Indices must be non-negative")
+
+    # Read campaign snapshot under lock
+    with campaign_lock(campaign_id):
+        data = load_campaign_json(campaign_id)
+        if not data:
+            raise HTTPException(status_code=404, detail="Campaign not found")
+        language = data.get("language", "zh")
 
     from app.services.content_service import generate_content as generate_content_item
 
-    language = data.get("language", "zh")
+    # LLM call (no lock held)
     try:
         result = await generate_content_item(
             data,
@@ -475,19 +536,30 @@ async def generate_content(campaign_id: str, body: ContentGenerateRequest):
     except RuntimeError as e:
         raise HTTPException(status_code=502, detail=str(e))
 
-    # Persist generated content back to campaign
-    plan = data.get("plan", {})
-    priorities = plan.get("priorities", [])
-    if body.priority_index < len(priorities):
-        content_plan = priorities[body.priority_index].get("content_plan", [])
-        if body.content_index < len(content_plan):
-            item = content_plan[body.content_index]
-            item["generated_content"] = result["text"]
-            item["generated_model"] = result["model"]
-            item["generated_at"] = datetime.now().isoformat()
+    # Persist generated content under lock
+    with campaign_lock(campaign_id):
+        data = load_campaign_json(campaign_id)
+        if not data:
+            raise HTTPException(status_code=404, detail="Campaign not found")
 
-    data["updated_at"] = datetime.now().isoformat()
-    save_campaign_json(campaign_id, data)
+        plan = data.get("plan", {})
+        priorities = plan.get("priorities", [])
+        if body.priority_index < len(priorities):
+            content_plan = priorities[body.priority_index].get("content_plan", [])
+            if body.content_index < len(content_plan):
+                item = content_plan[body.content_index]
+                item["generated_content"] = result["text"]
+                item["generated_model"] = result["model"]
+                item["generated_at"] = datetime.now().isoformat()
+        else:
+            raise HTTPException(
+                status_code=400,
+                detail=f"priority_index {body.priority_index} out of range "
+                       f"(max {len(priorities) - 1})",
+            )
+
+        data["updated_at"] = datetime.now().isoformat()
+        save_campaign_json(campaign_id, data)
 
     return {
         "ok": True,
@@ -528,13 +600,16 @@ def import_campaign(req: CampaignImportRequest):
     campaign_id = req.campaign_id or req.data.get("campaign_id", "")
     if not campaign_id:
         raise HTTPException(status_code=400, detail="No campaign_id in import data")
+    if not isinstance(req.data, dict):
+        raise HTTPException(status_code=400, detail="Import data must be a JSON object")
 
-    # If campaign already exists, create a copy with timestamp
-    existing = load_campaign_json(campaign_id)
-    if existing:
-        campaign_id = f"{campaign_id}-import-{datetime.now():%H%M%S}"
-        req.data["campaign_id"] = campaign_id
+    with campaign_lock(campaign_id):
+        # If campaign already exists, create a copy with timestamp
+        existing = load_campaign_json(campaign_id)
+        if existing:
+            campaign_id = f"{campaign_id}-import-{datetime.now():%H%M%S}"
+            req.data["campaign_id"] = campaign_id
 
-    req.data["updated_at"] = datetime.now().isoformat()
-    save_campaign_json(campaign_id, req.data)
+        req.data["updated_at"] = datetime.now().isoformat()
+        save_campaign_json(campaign_id, req.data)
     return {"ok": True, "campaign_id": campaign_id}
