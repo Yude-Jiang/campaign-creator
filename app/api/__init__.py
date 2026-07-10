@@ -4,6 +4,8 @@ from typing import Any
 
 from fastapi import Request
 
+from app.core.config import settings
+
 
 def page_context(
     request: Request,
@@ -17,6 +19,7 @@ def page_context(
         "request": request,
         "language": language,
         "tabs": tabs or default_tabs(),
+        "geo_hub_url": settings.geo_hub_url,
         **extra,
     }
 

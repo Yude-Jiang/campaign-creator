@@ -10,9 +10,9 @@
     </h2>
     <p style="color:var(--slate);font-size:14px;">
       {% if language == 'zh' %}
-      将每个 Benchmark Question 放入 GEO-hub-experimental 进行诊断，下载结果文件后拖入下方上传区。
+      请至少上传 3-5 个关键问题的诊断结果。覆盖率越高，生成的 Campaign Plan 越精准。
       {% else %}
-      Run each benchmark question through GEO-hub-experimental, download the result files, and drop them below.
+      Please upload diagnoses for at least 3-5 key questions. Higher coverage = more accurate Campaign Plan.
       {% endif %}
     </p>
   </div>
@@ -20,7 +20,7 @@
   <!-- Instructions -->
   <div class="alert alert-info">
     <strong>📋 {% if language == 'zh' %}操作步骤：{% else %}Steps:{% endif %}</strong><br>
-    1. {% if language == 'zh' %}打开 <a href="#" target="_blank">GEO-hub-experimental</a>{% else %}Open <a href="#" target="_blank">GEO-hub-experimental</a>{% endif %}<br>
+    1. {% if language == 'zh' %}打开 <a href="{{ geo_hub_url }}" target="_blank" rel="noopener">GEO-hub-experimental</a>{% else %}Open <a href="{{ geo_hub_url }}" target="_blank" rel="noopener">GEO-hub-experimental</a>{% endif %}<br>
     2. {% if language == 'zh' %}逐个粘贴下面的 Benchmark Question{% else %}Paste each benchmark question below{% endif %}<br>
     3. {% if language == 'zh' %}下载诊断结果（建议选择 Markdown 格式）{% else %}Download diagnosis results (Markdown format recommended){% endif %}<br>
     4. {% if language == 'zh' %}将文件拖入下方对应问题的上传区{% else %}Drop files into the matching question upload areas below{% endif %}
@@ -28,10 +28,27 @@
 
   <!-- Question list with upload slots -->
   <div style="margin-top: 20px;">
-    <h3 style="font-size:16px;color:var(--navy);margin-bottom:12px;">
-      {% if language == 'zh' %}Questions to Diagnose{% else %}Questions to Diagnose{% endif %}
-      (<span id="diag-count">{{ campaign.diagnoses|length if campaign.diagnoses else 0 }}</span>/{{ campaign.questions|length if campaign.questions else 0 }})
-    </h3>
+    {% set diag_count = campaign.diagnoses|length if campaign.diagnoses else 0 %}
+    {% set q_total = campaign.questions|length if campaign.questions else 0 %}
+    {% set recommended = [q_total, 7]|min %}
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+      <h3 style="font-size:16px;color:var(--navy);margin:0;">
+        {% if language == 'zh' %}诊断问题{% else %}Questions to Diagnose{% endif %}
+      </h3>
+      <span style="font-size:13px;color:var(--slate);">
+        {% if language == 'zh' %}
+        已上传 <strong style="color:var(--blue);">{{ diag_count }}</strong> / 建议 {{ recommended }} 个（共 {{ q_total }} 个问题）
+        {% else %}
+        Uploaded <strong style="color:var(--blue);">{{ diag_count }}</strong> / {{ recommended }} recommended ({{ q_total }} total)
+        {% endif %}
+      </span>
+    </div>
+    <!-- Progress bar -->
+    <div style="background:var(--line);border-radius:10px;height:8px;margin-bottom:20px;">
+      <div id="diag-progress-bar" style="background:{{ 'var(--green)' if diag_count >= recommended else 'var(--blue)' }};height:100%;border-radius:10px;
+           width:{{ (diag_count / recommended * 100) if recommended > 0 else 0 }}%;max-width:100%;transition:width 0.3s;">
+      </div>
+    </div>
 
     {% if not campaign.questions %}
     <div class="card" style="text-align:center;padding:30px;">
@@ -43,7 +60,7 @@
     {% for q in campaign.questions %}
     <div class="card" style="margin-bottom:12px;" id="q-{{ q.id }}">
       <div style="padding:12px 16px;display:flex;align-items:center;gap:12px;">
-        <span style="font-weight:700;color:var(--blue);font-size:13px;white-space:nowrap;">Q{{ loop.index }}</span>
+        <span style="font-weight:700;color:var(--blue);font-size:13px;white-space:nowrap;">Q{{ loop.index }}{% if q.diagnostic_value == 'high' %} <span style="color:var(--gold);" title="{% if language == 'zh' %}优先诊断{% else %}Priority diagnosis{% endif %}">★</span>{% endif %}</span>
         <span style="font-size:13px;flex:1;">{{ q.text }}</span>
         <span class="chip chip-{{ 'strong' if q.diagnostic_value == 'high' else 'moderate' if q.diagnostic_value == 'medium' else 'weak' }}">{{ q.diagnostic_value }}</span>
       </div>
@@ -83,10 +100,15 @@
 <button class="btn btn-secondary" onclick="navigateToTab(1)">
   ← {% if language == 'zh' %}返回 Persona{% else %}Back to Persona{% endif %}
 </button>
-{% set diag_count = campaign.diagnoses|length if campaign.diagnoses else 0 %}
-{% set q_count = campaign.questions|length if campaign.questions else 0 %}
+{% set diag_count_footer = campaign.diagnoses|length if campaign.diagnoses else 0 %}
+{% set q_count_footer = campaign.questions|length if campaign.questions else 0 %}
+{% if diag_count_footer == 0 %}
+<span style="font-size:11px;color:var(--amber);margin-right:8px;">
+  {% if language == 'zh' %}请至少上传 1 个诊断文件{% else %}Upload at least 1 diagnosis file{% endif %}
+</span>
+{% endif %}
 <button class="btn btn-primary" onclick="navigateToTab(3)"
-        {{ 'disabled' if diag_count == 0 or q_count == 0 else '' }}>
+        {{ 'disabled' if diag_count_footer == 0 or q_count_footer == 0 else '' }}>
   {% if language == 'zh' %}分析诊断 → 生成 Plan{% else %}Analyze → Generate Plan{% endif %}
 </button>
 {% endblock %}
@@ -123,9 +145,24 @@ async function uploadFile(file, questionId) {
     if (data.ok) {
       const statusEl = document.getElementById('file-status-' + questionId);
       if (statusEl) statusEl.innerHTML = '<span style="color:var(--green);">✅ ' + file.name + '</span>';
-      // Update count
-      const countEl = document.getElementById('diag-count');
-      if (countEl) countEl.textContent = parseInt(countEl.textContent) + 1;
+      // Update progress bar
+      const progressBar = document.getElementById('diag-progress-bar');
+      if (progressBar) {
+        const currentWidth = parseFloat(progressBar.style.width) || 0;
+        const step = 100 / {{ recommended }};
+        progressBar.style.width = Math.min(currentWidth + step, 100) + '%';
+        if (parseFloat(progressBar.style.width) >= 100) {
+          progressBar.style.background = 'var(--green)';
+        }
+      }
+      // Enable the footer button if it was disabled
+      const footerBtn = document.querySelector('#panel-diagnosis ~ div .btn-primary, .footer-actions .btn-primary');
+      if (footerBtn && footerBtn.disabled) {
+        footerBtn.disabled = false;
+        // Remove the tooltip if present
+        const tooltip = footerBtn.parentElement.querySelector('span');
+        if (tooltip) tooltip.style.display = 'none';
+      }
     }
   } catch (err) {
     alert('Upload failed: ' + err.message);

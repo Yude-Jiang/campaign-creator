@@ -4,7 +4,7 @@
 
 1. **只输出 JSON**：你的回复必须是一个完整的 ```json 代码块，不要在 JSON 前后添加任何解释、问候或总结文字。
 2. **不得编造数据**：不要编造具体市场份额数字、营收数据、未公开的产品规格。不确定的信息标注 [需核实] 或留空。
-3. **基于真实洞察**：Persona 和 Question 必须反映技术社区中真实存在的讨论和问题，而非凭空想象。
+3. **基于合理假设**：Persona 和 Question 应基于行业知识和常见社区讨论模式构建。标注为「假设」的字段（assumed_platform、assumed_heat）是你基于行业经验的判断，非事实数据。如 grounding 不可用，这些字段反映的是"该问题最可能出现在哪个社区"，而非"经数据验证的统计"。
 4. **不硬编码 ST 品牌**：问题和 Persona 名称中不要出现 "ST"、"意法半导体"——这些问题将用于测试 AI 模型的自然品牌召回。
 
 ---
@@ -46,7 +46,7 @@
   "tech_depth": "deep | moderate | shallow",
   "decision_weight": "high | medium | low",
   "pain_points": ["痛点1", "痛点2", "痛点3"],
-  "info_channels": ["CSDN", "知乎", "电子发烧友", "微信", "B站"],
+  "info_channels": ["根据 persona 实际习惯选择，不限于示例平台"],
   "value_proposition": "针对此 Persona 的差异化价值主张（一句话，不含 ST 品牌名）"
 }
 ```
@@ -76,7 +76,7 @@
 | **category_awareness** (品类认知) | 3-4 个 | "XX 是什么"、"XX 和 YY 有什么区别" |
 | **selection** (选型) | 3-4 个 | "有哪些厂商"、"主流方案有哪些" |
 | **implementation** (实施) | 2-3 个 | "怎么迁移"、"如何集成"、"踩过哪些坑" |
-| **cost** (成本) | 2-3 个 | "能省多少成本"、"如何降本"、"TCo 怎么算" |
+| **cost** (成本) | 2-3 个 | "能省多少成本"、"如何降本"、"TCO 怎么算" |
 
 每个 Question 的 JSON 格式：
 ```json
@@ -87,8 +87,8 @@
   "category": "category_awareness | selection | implementation | cost",
   "target_persona_ids": ["prac_engineer"],
   "diagnostic_value": "high | medium | low",
-  "source_platform": "知乎 | CSDN | 电子发烧友 | 百度知道 | Reddit | Stack Overflow",
-  "source_heat": "高 | 中 | 低 — 该问题在社区中的大致讨论热度"
+  "assumed_platform": "知乎 | CSDN | 电子发烧友 | 百度知道 | Reddit | Stack Overflow",
+  "assumed_heat": "高 | 中 | 低 — 基于行业经验假设的讨论热度，非实测数据（grounding 不可用时必须标注）"
 }
 ```
 
@@ -135,8 +135,8 @@
       "category": "selection",
       "target_persona_ids": ["prac_engineer"],
       "diagnostic_value": "high",
-      "source_platform": "知乎",
-      "source_heat": "高"
+      "assumed_platform": "知乎",
+      "assumed_heat": "高"
     }
   ]
 }

@@ -85,7 +85,7 @@
 
         <!-- Action buttons -->
         <div style="display:flex;gap:8px;margin-bottom:12px;">
-          <textarea id="prompt-{{ pi }}-{{ ci }}" style="display:none;">{{ item.get('llm_prompt', '') }}</textarea>
+          <textarea id="prompt-{{ pi }}-{{ ci }}" style="display:none;">{{ item.get('content_brief', item.get('llm_prompt', '')) }}</textarea>
           <button class="btn btn-secondary" style="font-size:12px;padding:6px 14px;"
                   onclick="copyPrompt({{ pi }}, {{ ci }})">
             📋 {% if language == 'zh' %}复制 Prompt{% else %}Copy Prompt{% endif %}

@@ -155,8 +155,9 @@ async def generate_content(
     anchor_point = priority_item.get("anchor_point", "")
     keywords = brief.get("keywords", [])
 
-    # The pre-written llm_prompt from the plan — used as additional context
-    llm_prompt_context = content_item.get("llm_prompt", "")
+    # The content_brief from the plan — used as editing guidance
+    # Falls back to deprecated llm_prompt field for backward compat
+    content_brief_context = content_item.get("content_brief", "") or content_item.get("llm_prompt", "")
 
     # ── Build template variables ──
     variables: dict[str, Any] = {
@@ -168,8 +169,8 @@ async def generate_content(
     if needs_keywords:
         variables["keywords"] = keywords
 
-    # Inject the plan's llm_prompt as extra context
-    variables["content_brief"] = llm_prompt_context
+    # Inject the plan's content_brief as editing guidance
+    variables["content_brief"] = content_brief_context
 
     logger.info(
         "Generating content: format=%s → template=%s, task=%s, model chain routed",

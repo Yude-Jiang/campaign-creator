@@ -6,6 +6,11 @@
 2. **基于分析输入**：所有内容策略和优先级判断必须基于提供的 analysis_json，不可凭空制定策略。
 3. **不得编造数据**：不要编造具体市场份额数字、营收数据、未公开的产品规格。如果分析输入中没有某类数据，如实反映而非编造。
 4. **保留关键字段**：每个 priority item 必须回填 question_text（从分析输入中提取），确保下游展示有完整信息。
+5. **优先级自动计算**：priority 必须由 strategic_importance、st_current_strength、winnability 三因素决定，公式为：
+   - P0: strategic_importance ≥ 4 AND winnability ≥ 3 AND st_current_strength ≤ 2
+   - P1: strategic_importance ≥ 3 OR (winnability ≥ 3 AND st_current_strength ≤ 3)
+   - P2: 其余所有情况
+   注意：P1 使用 OR 条件——只要 strategic_importance 高（≥3）或可争夺且有空间，即为 P1。代码验证将以同样公式重新计算确保一致性。
 
 ---
 
@@ -73,12 +78,12 @@
   "gap_type": "open_gap | rival_owned | not_linked | buried_in_pdf",
   "content_plan": [
     {
-      "format": "zhihu_long_form_article | csdn_technical_blog | zhihu_qa_answer | infographic | bilibili_video_script | email_nurture | comparison_article | webinar | technical_whitepaper | case_study | cost_benefit_analysis",
+      "format": "zhihu_long_form_article | csdn_technical_blog | zhihu_qa_answer | baidu_search_ad | baidu_feed_ad",
       "channel": "知乎 | CSDN | B站 | 微信 | 邮件 | 百度竞价 | 百度信息流",
       "channel_type": "organic | paid",
       "target_persona_id": "prac_engineer",
       "title_suggestion": "中文内容标题建议（30字以内）",
-      "llm_prompt": "可用于生成此内容的完整 LLM prompt（中文，100-200字），包含角色、目标读者、核心论点、风格要求"
+      "content_brief": "内容编辑指引（中文，80-150字），包含核心论点、必须覆盖的差异化点、目标问题原文——而非独立 prompt。下游内容生成模块将以此 + 对应格式模板组合为完整 prompt"
     }
   ]
 }
@@ -89,7 +94,7 @@
 - 确保每个 target Persona 至少被 1 个内容条目覆盖
 - channel_type 标注为 "organic"（有机渠道）或 "paid"（付费渠道）
 - format 使用上述枚举值之一，不要自由发挥
-- llm_prompt 应该是可以直接复制使用的完整 prompt，而非简单描述
+- content_brief 是内容编辑指引（核心论点 + 差异化点 + 目标问题），下游会根据格式模板组合完整 prompt
 
 ### 4. 90 天时间线 (timeline_90days)
 
@@ -173,7 +178,7 @@
           "channel_type": "organic",
           "target_persona_id": "prac_engineer",
           "title_suggestion": "完整的中文标题建议",
-          "llm_prompt": "可直接使用的完整 LLM prompt"
+          "content_brief": "内容编辑指引：核心论点、差异化点、目标问题原文"
         }
       ]
     }
@@ -209,8 +214,8 @@
 
 **字段约束**：
 - `priorities` 必须覆盖分析输入中的所有问题——P2 可简化但不可遗漏
-- 每个 `content_plan` 条目必须包含所有 6 个字段（format, channel, channel_type, target_persona_id, title_suggestion, llm_prompt）
-- `llm_prompt` 不能为空或占位符——必须是完整可用的 prompt
+- 每个 `content_plan` 条目必须包含所有 6 个字段（format, channel, channel_type, target_persona_id, title_suggestion, content_brief）
+- `content_brief` 不能为空或占位符——必须包含核心论点和差异化点
 - `timeline_90days` 必须恰好 4 个 phase
 - `monitoring_metrics` 覆盖所有 P0 和 P1 问题
 - `content_strategy_summary` 不能为空

@@ -56,6 +56,28 @@ def create_campaign(req: CampaignCreateRequest):
     return {"campaign_id": campaign_id, "redirect": f"/campaigns/{campaign_id}"}
 
 
+class ParseBriefRequest(BaseModel):
+    text: str
+    language: str = "zh"
+
+
+@router.post("/parse-brief")
+async def parse_brief(req: ParseBriefRequest):
+    """Parse a natural-language campaign brief into structured fields using AI."""
+    from app.services.llm_router import llm_router
+    from app.services.persona_service import _safe_parse_json
+
+    result = await llm_router.route_and_generate(
+        task="vp_generation",  # Use DeepSeek for fast, cost-effective parsing
+        prompt_name="parse_brief.md",
+        variables={"text": req.text},
+        language=req.language,
+        max_tokens=1024,
+    )
+    parsed = _safe_parse_json(result["text"])
+    return parsed
+
+
 @router.get("/campaigns")
 def list_all_campaigns():
     """List all campaigns."""
@@ -184,15 +206,36 @@ class PersonaUpdateRequest(BaseModel):
 
 @router.put("/campaigns/{campaign_id}/persona")
 def update_persona(campaign_id: str, body: PersonaUpdateRequest):
-    """Save user-edited personas and/or questions."""
+    """Save user-edited personas and/or questions.
+
+    Merges by ID — only provided fields are updated; unedited fields preserved.
+    Personas/questions with IDs not in the existing list are appended.
+    """
     data = load_campaign_json(campaign_id)
     if not data:
         raise HTTPException(status_code=404, detail="Campaign not found")
 
     if body.personas is not None:
-        data["personas"] = body.personas
+        existing_personas = {p.get("id"): p for p in data.get("personas", []) if p.get("id")}
+        for incoming in body.personas:
+            pid = incoming.get("id", "")
+            if pid and pid in existing_personas:
+                # Merge: update only provided fields, preserve rest
+                existing_personas[pid].update(incoming)
+            elif pid:
+                # New persona with ID
+                existing_personas[pid] = incoming
+        data["personas"] = list(existing_personas.values())
+
     if body.questions is not None:
-        data["questions"] = body.questions
+        existing_questions = {q.get("id"): q for q in data.get("questions", []) if q.get("id")}
+        for incoming in body.questions:
+            qid = incoming.get("id", "")
+            if qid and qid in existing_questions:
+                existing_questions[qid].update(incoming)
+            elif qid:
+                existing_questions[qid] = incoming
+        data["questions"] = list(existing_questions.values())
 
     data["updated_at"] = datetime.now().isoformat()
     save_campaign_json(campaign_id, data)

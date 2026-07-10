@@ -12,12 +12,17 @@ class QuestionCategory(StrEnum):
 
 
 class BenchmarkQuestion(BaseModel):
-    """A benchmark question for GEO diagnosis."""
+    """A benchmark question for GEO diagnosis with rich metadata."""
     id: str = ""
     text: str = ""                                  # Chinese text
     text_en: str = ""                               # English version (optional)
     category: QuestionCategory = QuestionCategory.CATEGORY_AWARENESS
     target_persona_ids: list[str] = Field(default_factory=list)
     diagnostic_value: Literal["high", "medium", "low"] = "medium"
-    source_platform: str = ""                       # Where found (Zhihu, CSDN, etc.)
-    source_heat: str = ""                           # Approximate search volume
+    assumed_platform: str = ""                      # Assumed platform — not verified (grounding unavailable)
+    assumed_heat: str = ""                          # Assumed discussion heat — not verified
+    search_intent: str = ""                         # informational | comparison | transactional
+    difficulty_level: str = ""                      # beginner | intermediate | advanced
+    search_volume_estimate: str = ""                # High | Medium | Low
+    seasonality: str = ""                           # evergreen | trending | seasonal
+    related_questions: list[str] = Field(default_factory=list)

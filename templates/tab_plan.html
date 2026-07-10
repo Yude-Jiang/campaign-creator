@@ -7,13 +7,13 @@
 
   <div style="margin-bottom: 28px;">
     <h2 style="font-size:22px;font-weight:700;color:var(--navy);margin-bottom:6px;">
-      {% if language == 'zh' %}Campaign Plan{% else %}Campaign Plan{% endif %}
+      📊 {% if language == 'zh' %}Campaign Plan{% else %}Campaign Plan{% endif %}
     </h2>
     <p style="color:var(--slate);font-size:14px;">
       {% if language == 'zh' %}
-      AI 将综合分析所有 GEO 诊断结果，生成优先级矩阵、90 天时间线和内容策略。
+      AI 综合分析所有 GEO 诊断结果，生成优先级矩阵、竞品格局、90 天时间线和内容策略。
       {% else %}
-      AI will analyze all GEO diagnosis results and generate a priority matrix, 90-day timeline, and content strategy.
+      AI analyzes all GEO diagnosis results to generate a priority matrix, competitive landscape, 90-day timeline, and content strategy.
       {% endif %}
     </p>
   </div>
@@ -27,11 +27,9 @@
     </h3>
     <p style="color:var(--slate);font-size:14px;margin-bottom:20px;">
       {% if language == 'zh' %}
-      点击下方按钮，AI 将读取所有诊断文件，分析 ST 在每个问题中的 AI 感知现状、
-      <br>竞品格局，并生成优先级矩阵和执行计划。
+      点击下方按钮，AI 将读取所有诊断文件，分析 ST 的 AI 感知现状、竞品格局，并生成完整的执行计划。
       {% else %}
-      Click below to have AI read all diagnosis files, analyze ST's AI perception per question,
-      <br>map the competitive landscape, and generate a priority matrix with execution plan.
+      Click below for AI to read all diagnosis files, analyze ST's AI perception and competitive landscape, then generate a full execution plan.
       {% endif %}
     </p>
     <button class="btn btn-primary" onclick="generatePlan()">
@@ -40,17 +38,206 @@
   </div>
 
   {% else %}
-  <!-- Generated plan shown here (Phase 1f will fill this in) -->
-  <div class="card">
-    <div class="card-header">{% if language == 'zh' %}AI 感知现状总结{% else %}AI Perception Summary{% endif %}</div>
+  {% set plan = campaign.plan %}
+
+  <!-- ═══ Section 1: AI Perception Summary ═══ -->
+  <div class="card" style="margin-bottom:20px;">
+    <div class="card-header" style="background:var(--navy);color:#fff;">
+      📝 {% if language == 'zh' %}AI 感知现状总结{% else %}AI Perception Summary{% endif %}
+    </div>
     <div class="card-body">
-      <p style="font-size:14px;white-space:pre-wrap;">{{ campaign.plan.ai_perception_summary }}</p>
+      <p style="font-size:14px;white-space:pre-wrap;line-height:1.7;">{{ plan.ai_perception_summary }}</p>
     </div>
   </div>
 
-  <div class="export-actions" style="margin-top:20px;">
-    <button class="btn btn-primary" onclick="exportPlan('md')">📄 {% if language == 'zh' %}导出 Markdown{% else %}Export Markdown{% endif %}</button>
-    <button class="btn btn-secondary" onclick="exportPlan('html')">🌐 {% if language == 'zh' %}导出 HTML 报告{% else %}Export HTML Report{% endif %}</button>
+  <!-- ═══ Section 2: Inverted Pyramid ═══ -->
+  {% if plan.inverted_pyramid %}
+  <div class="card" style="margin-bottom:20px;">
+    <div class="card-header">
+      🔺 {% if language == 'zh' %}倒金字塔 — ST 召回强度{% else %}Inverted Pyramid — ST Recall Strength{% endif %}
+    </div>
+    <div class="card-body">
+      {% for qid, data in plan.inverted_pyramid.items() %}
+      {% set strength = data.strength or data.get('perception_tier', 'weak') %}
+      {% set width_pct = '95' if strength == 'strong' else '60' if strength == 'moderate' else '25' if strength == 'weak' else '5' %}
+      {% set color = 'var(--green)' if strength == 'strong' else 'var(--blue)' if strength == 'moderate' else 'var(--amber)' if strength == 'weak' else 'var(--red)' %}
+      <div style="display:flex;align-items:center;gap:12px;margin-bottom:10px;">
+        <span style="font-weight:600;font-size:12px;min-width:30px;color:var(--navy);">{{ qid }}</span>
+        <div style="flex:1;background:var(--line);border-radius:6px;height:22px;">
+          <div style="background:{{ color }};width:{{ width_pct }}%;height:100%;border-radius:6px;display:flex;align-items:center;padding-left:8px;">
+            <span style="font-size:10px;color:#fff;font-weight:600;">{{ strength }}</span>
+          </div>
+        </div>
+        <span style="font-size:11px;color:var(--slate);max-width:250px;">{{ data.summary or '' }}</span>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+  {% endif %}
+
+  <!-- ═══ Section 3: Competitor Landscape ═══ -->
+  {% if plan.competitor_landscape %}
+  <div class="card" style="margin-bottom:20px;">
+    <div class="card-header">
+      🏢 {% if language == 'zh' %}竞品格局{% else %}Competitor Landscape{% endif %}
+    </div>
+    <div class="card-body">
+      <div class="plan-grid">
+        {% for cl in plan.competitor_landscape %}
+        <div style="padding:14px;border:1px solid var(--line);border-radius:8px;background:var(--paper);">
+          <div style="font-weight:700;color:var(--navy);margin-bottom:4px;">
+            {{ cl.competitor or cl.get('name', '') }}
+          </div>
+          {% if cl.get('product') %}<div style="font-size:12px;color:var(--slate);">📦 {{ cl.product }}</div>{% endif %}
+          <span class="chip chip-{{ 'strong' if (cl.position or cl.get('layer','')) in ['leader','strong'] else 'moderate' }}"
+                style="margin-top:6px;">{{ cl.position or cl.get('layer', '') }}</span>
+          <div style="font-size:12px;margin-top:8px;color:var(--slate);line-height:1.5;">
+            <strong>{% if language == 'zh' %}ST 策略：{% else %}ST Strategy: {% endif %}</strong>{{ cl.st_strategy or '' }}
+          </div>
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+  </div>
+  {% endif %}
+
+  <!-- ═══ Section 4: Priority Matrix ═══ -->
+  {% if plan.priorities %}
+  <div class="card" style="margin-bottom:20px;">
+    <div class="card-header" style="display:flex;justify-content:space-between;align-items:center;">
+      <span>🎯 {% if language == 'zh' %}优先级矩阵{% else %}Priority Matrix{% endif %}</span>
+      <span style="font-size:12px;font-weight:400;">
+        <span class="priority priority-p0">P0: {{ plan.priorities|selectattr('priority','equalto','P0')|list|length }}</span>
+        <span class="priority priority-p1" style="margin-left:8px;">P1: {{ plan.priorities|selectattr('priority','equalto','P1')|list|length }}</span>
+        <span class="priority priority-p2" style="margin-left:8px;">P2: {{ plan.priorities|selectattr('priority','equalto','P2')|list|length }}</span>
+      </span>
+    </div>
+    <div class="card-body" style="overflow-x:auto;">
+      <table class="table-compact" id="priority-table">
+        <thead>
+          <tr>
+            <th onclick="sortPriorityTable('priority')" style="cursor:pointer;">P ▾</th>
+            <th>{% if language == 'zh' %}问题{% else %}Question{% endif %}</th>
+            <th onclick="sortPriorityTable('si')" style="cursor:pointer;">{% if language == 'zh' %}战略{% else %}SI{% endif %} ▾</th>
+            <th onclick="sortPriorityTable('st')" style="cursor:pointer;">ST ▾</th>
+            <th onclick="sortPriorityTable('win')" style="cursor:pointer;">{% if language == 'zh' %}可争夺{% else %}Win{% endif %} ▾</th>
+            <th>{% if language == 'zh' %}差距类型{% else %}Gap{% endif %}</th>
+            <th>{% if language == 'zh' %}锚点{% else %}Anchor{% endif %}</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for p in plan.priorities %}
+          <tr data-priority="{{ p.priority }}" data-si="{{ p.strategic_importance or 0 }}" data-st="{{ p.st_current_strength or 0 }}" data-win="{{ p.winnability or 0 }}">
+            <td><span class="priority priority-{{ (p.priority or 'p2')|lower }}">{{ p.priority or 'P2' }}</span></td>
+            <td style="max-width:220px;font-size:12px;">{{ p.question_text[:80] if p.question_text else '' }}</td>
+            <td>{{ '★' * ((p.strategic_importance or 0)|int) }}</td>
+            <td>{{ '★' * ((p.st_current_strength or 0)|int) }}</td>
+            <td>{{ '★' * ((p.winnability or 0)|int) }}</td>
+            <td><span class="chip chip-moderate" style="font-size:10px;">{{ p.gap_type or '' }}</span></td>
+            <td style="max-width:180px;font-size:11px;">{{ p.anchor_point[:60] if p.anchor_point else '' }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+  {% endif %}
+
+  <!-- ═══ Section 5: 90-Day Timeline ═══ -->
+  {% if plan.timeline_90days %}
+  <div class="card" style="margin-bottom:20px;">
+    <div class="card-header">
+      📅 {% if language == 'zh' %}90 天执行时间线{% else %}90-Day Execution Timeline{% endif %}
+    </div>
+    <div class="card-body">
+      <div class="timeline-grid">
+        {% for phase in plan.timeline_90days %}
+        {% set phase_name = phase.phase or phase.get('week', '') %}
+        {% set phase_focus = phase.focus or phase.get('theme', '') %}
+        {% set actions = phase.actions or phase.get('items', []) %}
+        <div style="padding:16px;border:1px solid var(--line);border-radius:8px;border-top:4px solid var(--blue);">
+          <div style="font-weight:700;color:var(--navy);margin-bottom:4px;">{{ phase_name }}</div>
+          <div style="font-size:12px;color:var(--blue);font-weight:600;margin-bottom:10px;">{{ phase_focus }}</div>
+          {% for action in actions %}
+          <div style="font-size:11px;padding:5px 0;border-bottom:1px solid var(--line);line-height:1.4;">
+            {% if action.channel %}<strong>[{{ action.channel }}]</strong> {% endif %}
+            {{ action.description or action.get('task', '') }}
+          </div>
+          {% endfor %}
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+  </div>
+  {% endif %}
+
+  <!-- ═══ Section 6: Monitoring Metrics ═══ -->
+  {% if plan.monitoring_metrics %}
+  <div class="card" style="margin-bottom:20px;">
+    <div class="card-header">
+      📈 {% if language == 'zh' %}监测指标{% else %}Monitoring Metrics{% endif %}
+    </div>
+    <div class="card-body" style="overflow-x:auto;">
+      <table class="table-compact">
+        <thead>
+          <tr>
+            <th>{% if language == 'zh' %}问题{% else %}Question{% endif %}</th>
+            <th>{% if language == 'zh' %}目标召回位置{% else %}Target Recall{% endif %}</th>
+            <th>{% if language == 'zh' %}关联关键词{% else %}Keywords{% endif %}</th>
+            <th>{% if language == 'zh' %}目标模型{% else %}Target Models{% endif %}</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for m in plan.monitoring_metrics %}
+          <tr>
+            <td style="font-size:12px;">{{ m.question_id or '' }}</td>
+            <td>{{ m.expected_recall_position or m.get('target_position', '') }}</td>
+            <td style="font-size:11px;">
+              {% if m.associated_keywords %}
+                {% if m.associated_keywords is string %}
+                  {{ m.associated_keywords }}
+                {% else %}
+                  {{ m.associated_keywords|join(', ') }}
+                {% endif %}
+              {% endif %}
+            </td>
+            <td style="font-size:11px;">
+              {% if m.target_models %}
+                {% if m.target_models is string %}
+                  {{ m.target_models }}
+                {% else %}
+                  {{ m.target_models|join(', ') }}
+                {% endif %}
+              {% endif %}
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+  {% endif %}
+
+  <!-- ═══ Section 7: Content Strategy Summary ═══ -->
+  {% if plan.content_strategy_summary %}
+  <div class="card" style="margin-bottom:20px;">
+    <div class="card-header">
+      ✍️ {% if language == 'zh' %}内容策略总结{% else %}Content Strategy Summary{% endif %}
+    </div>
+    <div class="card-body">
+      <p style="font-size:14px;white-space:pre-wrap;line-height:1.7;">{{ plan.content_strategy_summary }}</p>
+    </div>
+  </div>
+  {% endif %}
+
+  <!-- Export buttons -->
+  <div class="export-actions" style="margin-top:20px;display:flex;gap:12px;">
+    <button class="btn btn-primary" onclick="exportPlan('md')">
+      📄 {% if language == 'zh' %}导出 Markdown{% else %}Export Markdown{% endif %}
+    </button>
+    <button class="btn btn-secondary" onclick="exportPlan('html')">
+      🌐 {% if language == 'zh' %}导出 HTML 报告{% else %}Export HTML Report{% endif %}
+    </button>
   </div>
   {% endif %}
 
@@ -65,6 +252,9 @@
 <button class="btn btn-primary" onclick="exportPlan('md')">
   ⬇ {% if language == 'zh' %}导出 Markdown{% else %}Export Markdown{% endif %}
 </button>
+<button class="btn btn-primary" onclick="navigateToTab(4)" style="margin-left:8px;">
+  {% if language == 'zh' %}Content Studio →{% else %}Content Studio →{% endif %}
+</button>
 {% endif %}
 {% endblock %}
 
@@ -78,14 +268,31 @@ async function generatePlan() {
     await apiFetch('/api/campaigns/{{ campaign_id }}/plan/generate', { method: 'POST' });
     window.location.reload();
   } catch (err) {
-    alert('Generation failed: ' + err.message);
+    alert('{{ "生成失败：" if language == "zh" else "Generation failed: " }}' + err.message);
   } finally {
     if (loading) loading.style.display = 'none';
   }
 }
 
-async function exportPlan(format) {
+function exportPlan(format) {
   window.open('/api/campaigns/{{ campaign_id }}/plan/export/' + format + '?lang={{ language }}', '_blank');
+}
+
+// Sortable priority table
+function sortPriorityTable(col) {
+  const tbody = document.querySelector('#priority-table tbody');
+  if (!tbody) return;
+  const rows = Array.from(tbody.querySelectorAll('tr'));
+  const keyMap = { 'priority': 'priority', 'si': 'si', 'st': 'st', 'win': 'win' };
+  const key = keyMap[col] || 'priority';
+  const priorityOrder = { 'P0': 0, 'P1': 1, 'P2': 2, 'p0': 0, 'p1': 1, 'p2': 2 };
+  rows.sort((a, b) => {
+    if (key === 'priority') {
+      return (priorityOrder[a.dataset.priority] || 99) - (priorityOrder[b.dataset.priority] || 99);
+    }
+    return parseInt(b.dataset[key]) - parseInt(a.dataset[key]);
+  });
+  rows.forEach(row => tbody.appendChild(row));
 }
 </script>
 {% endblock %}

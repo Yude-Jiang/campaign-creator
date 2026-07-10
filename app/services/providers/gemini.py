@@ -31,11 +31,16 @@ class GeminiProvider(BaseProvider):
 
     @staticmethod
     def _get_gcloud_token() -> str | None:
-        """Get a fresh access token from gcloud CLI."""
+        """Get a fresh access token.
+
+        Tries in order:
+        1. gcloud CLI (local dev, Cloud Shell)
+        2. Google Application Default Credentials (Cloud Run, GCE)
+        """
         import os
         import subprocess
 
-        # Try common gcloud paths
+        # Strategy 1: gcloud CLI
         candidates = [
             "gcloud",                                                    # PATH
             r"C:\Program Files (x86)\Google\Cloud SDK\google-cloud-sdk\bin\gcloud.cmd",
@@ -57,7 +62,22 @@ class GeminiProvider(BaseProvider):
                 logger.debug("gcloud at %s failed: %s", gcloud_path, e)
                 continue
 
-        logger.warning("Could not find gcloud CLI in any known location")
+        # Strategy 2: Google Application Default Credentials (container/Cloud Run)
+        try:
+            import google.auth
+            import google.auth.transport.requests
+
+            creds, _project = google.auth.default(
+                scopes=["https://www.googleapis.com/auth/cloud-platform"]
+            )
+            creds.refresh(google.auth.transport.requests.Request())
+            if creds.token:
+                logger.info("Gemini: got token via ADC")
+                return creds.token
+        except Exception as e:
+            logger.debug("ADC fallback failed: %s", e)
+
+        logger.warning("Could not get gcloud/ADC token from any source")
         return None
 
     def _generate_via_rest(
@@ -66,6 +86,7 @@ class GeminiProvider(BaseProvider):
         system_prompt: str = "",
         max_tokens: int = 4096,
         temperature: float = 0.7,
+        grounding: bool = False,
     ) -> str:
         """Generate via Vertex AI REST API using gcloud access token."""
         token = self._get_gcloud_token()
@@ -79,13 +100,16 @@ class GeminiProvider(BaseProvider):
             model="gemini-2.5-flash",
         )
 
-        body = json.dumps({
+        body_dict: dict[str, Any] = {
             "contents": [{"role": "user", "parts": [{"text": full_prompt}]}],
             "generationConfig": {
                 "maxOutputTokens": max_tokens,
                 "temperature": temperature,
             },
-        }).encode("utf-8")
+        }
+        if grounding:
+            body_dict["tools"] = [{"google_search": {}}]
+        body = json.dumps(body_dict).encode("utf-8")
 
         req = urllib.request.Request(url, data=body, headers={
             "Content-Type": "application/json",
@@ -109,20 +133,24 @@ class GeminiProvider(BaseProvider):
         system_prompt: str = "",
         max_tokens: int = 4096,
         temperature: float = 0.7,
+        grounding: bool = False,
     ) -> str:
         """Generate via Google AI Studio API key."""
         from google import genai
-        from google.genai.types import GenerateContentConfig
+        from google.genai.types import GenerateContentConfig, GoogleSearch, Tool
 
         client = genai.Client(api_key=settings.gemini_api_key)
         full_prompt = f"{system_prompt}\n\n{prompt}" if system_prompt else prompt
+        config_kwargs: dict[str, Any] = {
+            "max_output_tokens": max_tokens,
+            "temperature": temperature,
+        }
+        if grounding:
+            config_kwargs["tools"] = [Tool(google_search=GoogleSearch())]
         resp = client.models.generate_content(
             model="gemini-2.5-flash",
             contents=full_prompt,
-            config=GenerateContentConfig(
-                max_output_tokens=max_tokens,
-                temperature=temperature,
-            ),
+            config=GenerateContentConfig(**config_kwargs),
         )
         return resp.text
 
@@ -145,6 +173,7 @@ class GeminiProvider(BaseProvider):
                     system_prompt=system_prompt,
                     max_tokens=max_tokens,
                     temperature=temperature,
+                    grounding=grounding,
                 )
             except Exception as exc:
                 logger.warning(
@@ -163,6 +192,7 @@ class GeminiProvider(BaseProvider):
                 system_prompt=system_prompt,
                 max_tokens=max_tokens,
                 temperature=temperature,
+                grounding=grounding,
             )
 
         raise RuntimeError("Gemini not available: set GOOGLE_CLOUD_PROJECT or GEMINI_API_KEY")

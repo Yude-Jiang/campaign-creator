@@ -11,9 +11,9 @@
     </h2>
     <p style="color:var(--slate);font-size:14px;">
       {% if language == 'zh' %}
-      AI 将分析 Campaign Brief，搜索技术社区，生成目标 Persona、差异化 Value Proposition 和 Benchmark Questions。
+      AI 深度分析目标受众，生成可编辑的 Persona 和 Benchmark Questions。
       {% else %}
-      AI will analyze the campaign brief, search tech communities, and generate personas, differentiated value propositions, and benchmark questions.
+      AI deep-dives into target audiences, generating editable personas and benchmark questions.
       {% endif %}
     </p>
   </div>
@@ -27,11 +27,15 @@
     </h3>
     <p style="color:var(--slate);font-size:14px;margin-bottom:20px;">
       {% if language == 'zh' %}
-      点击下方按钮，AI 将基于你的 Brief 分析目标人群并生成 Benchmark Questions。
-      <br>此过程会启用 <strong>Web Grounding</strong>，搜索真实社区讨论。
+      点击下方按钮，AI 将分三步深度分析：<br>
+      ① 搜索技术社区挖掘真实 Persona（Web Grounding）<br>
+      ② 为每个 Persona 生成差异化价值主张<br>
+      ③ 基于真实搜索行为生成 Benchmark Questions
       {% else %}
-      Click below to have AI analyze your brief, research target audiences, and generate benchmark questions.
-      <br>This process uses <strong>Web Grounding</strong> to search real community discussions.
+      Click below for AI's 3-phase deep analysis:<br>
+      ① Search tech communities for real personas (Web Grounding)<br>
+      ② Generate differentiated value propositions per persona<br>
+      ③ Create benchmark questions based on real search behavior
       {% endif %}
     </p>
     <button class="btn btn-primary" onclick="generatePersona()">
@@ -40,21 +44,214 @@
   </div>
 
   {% else %}
-  <!-- Generated content shown here (Phase 1d will fill this in) -->
-  <div class="card">
-    <div class="card-header">
-      {% if language == 'zh' %}Persona 列表{% else %}Persona List{% endif %}
+
+  <!-- ── Persona Cards ── -->
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
+    <h3 style="font-size:16px;color:var(--navy);margin:0;">
+      🎯 {% if language == 'zh' %}目标 Persona（{{ campaign.personas|length }} 个）{% else %}Target Personas ({{ campaign.personas|length }}){% endif %}
+    </h3>
+    <button class="btn btn-secondary" style="font-size:12px;padding:4px 12px;" onclick="addPersona()">
+      + {% if language == 'zh' %}添加 Persona{% else %}Add Persona{% endif %}
+    </button>
+  </div>
+
+  <div id="persona-container">
+    {% for p in campaign.personas %}
+    <div class="card persona-card" id="persona-card-{{ p.id }}" style="margin-bottom:14px;">
+      <div class="card-header" style="display:flex;justify-content:space-between;align-items:center;cursor:pointer;"
+           onclick="togglePersona('{{ p.id }}')">
+        <div style="display:flex;align-items:center;gap:10px;">
+          <span id="persona-chevron-{{ p.id }}" style="font-size:12px;">▶</span>
+          <strong style="font-size:14px;">{{ p.name }}</strong>
+          <span class="chip chip-{{ 'strong' if p.layer == 'decision_maker' else 'moderate' if p.layer == 'practitioner' else 'weak' }}"
+                style="font-size:11px;">
+            {% if language == 'zh' %}
+              {% if p.layer == 'decision_maker' %}决策者{% elif p.layer == 'practitioner' %}实践者{% else %}影响者{% endif %}
+            {% else %}
+              {{ p.layer }}
+            {% endif %}
+          </span>
+          <span style="font-size:11px;color:var(--slate);">
+            {% if p.vp_headline %}"{{ p.vp_headline[:50] }}{% if p.vp_headline|length > 50 %}...{% endif %}"{% endif %}
+          </span>
+        </div>
+        <button class="btn btn-secondary" style="font-size:11px;padding:2px 8px;color:var(--red);"
+                onclick="event.stopPropagation();deletePersona('{{ p.id }}')"
+                title="{% if language == 'zh' %}删除此 Persona{% else %}Delete this persona{% endif %}">✕</button>
+      </div>
+
+      <div class="card-body persona-details" id="persona-details-{{ p.id }}" style="display:none;">
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+
+          <!-- Left column: core fields -->
+          <div>
+            <div class="form-group" style="margin-bottom:8px;">
+              <label style="font-size:11px;color:var(--slate);">{% if language == 'zh' %}名称{% else %}Name{% endif %}</label>
+              <input type="text" class="form-control form-control-sm" value="{{ p.name }}"
+                     data-field="name" data-persona-id="{{ p.id }}" onblur="scheduleSave()">
+            </div>
+            <div class="form-group" style="margin-bottom:8px;">
+              <label style="font-size:11px;color:var(--slate);">{% if language == 'zh' %}层级{% else %}Layer{% endif %}</label>
+              <select class="form-control form-control-sm" data-field="layer" data-persona-id="{{ p.id }}" onchange="scheduleSave()">
+                <option value="decision_maker" {{ 'selected' if p.layer == 'decision_maker' }}>{% if language == 'zh' %}决策者{% else %}Decision Maker{% endif %}</option>
+                <option value="practitioner" {{ 'selected' if p.layer == 'practitioner' }}>{% if language == 'zh' %}实践者{% else %}Practitioner{% endif %}</option>
+                <option value="influencer" {{ 'selected' if p.layer == 'influencer' }}>{% if language == 'zh' %}影响者{% else %}Influencer{% endif %}</option>
+              </select>
+            </div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
+              <div class="form-group" style="margin-bottom:8px;">
+                <label style="font-size:11px;color:var(--slate);">{% if language == 'zh' %}技术深度{% else %}Tech Depth{% endif %}</label>
+                <select class="form-control form-control-sm" data-field="tech_depth" data-persona-id="{{ p.id }}" onchange="scheduleSave()">
+                  <option value="deep" {{ 'selected' if p.tech_depth == 'deep' }}>Deep</option>
+                  <option value="moderate" {{ 'selected' if p.tech_depth == 'moderate' }}>Moderate</option>
+                  <option value="shallow" {{ 'selected' if p.tech_depth == 'shallow' }}>Shallow</option>
+                </select>
+              </div>
+              <div class="form-group" style="margin-bottom:8px;">
+                <label style="font-size:11px;color:var(--slate);">{% if language == 'zh' %}决策权重{% else %}Decision Weight{% endif %}</label>
+                <select class="form-control form-control-sm" data-field="decision_weight" data-persona-id="{{ p.id }}" onchange="scheduleSave()">
+                  <option value="high" {{ 'selected' if p.decision_weight == 'high' }}>High</option>
+                  <option value="medium" {{ 'selected' if p.decision_weight == 'medium' }}>Medium</option>
+                  <option value="low" {{ 'selected' if p.decision_weight == 'low' }}>Low</option>
+                </select>
+              </div>
+            </div>
+
+            <!-- Editable list fields -->
+            {% set list_fields = [
+              ('pain_points', '痛点' if language == 'zh' else 'Pain Points'),
+              ('info_channels', '信息渠道' if language == 'zh' else 'Info Channels'),
+              ('search_queries', '搜索词' if language == 'zh' else 'Search Queries'),
+              ('objections', '反对理由' if language == 'zh' else 'Objections'),
+              ('decision_criteria', '决策标准' if language == 'zh' else 'Decision Criteria'),
+            ] %}
+            {% for field_key, field_label in list_fields %}
+            <div class="form-group" style="margin-bottom:8px;">
+              <label style="font-size:11px;color:var(--slate);">{{ field_label }}</label>
+              <div id="list-{{ field_key }}-{{ p.id }}" style="display:flex;flex-direction:column;gap:3px;">
+                {% set items = p[field_key] if p[field_key] else [] %}
+                {% for item in items %}
+                <div style="display:flex;gap:4px;">
+                  <input type="text" class="form-control form-control-sm" value="{{ item }}"
+                         data-field="{{ field_key }}" data-persona-id="{{ p.id }}" data-index="{{ loop.index0 }}"
+                         onblur="scheduleSave()" style="flex:1;">
+                  <button class="btn btn-secondary" style="font-size:10px;padding:1px 5px;color:var(--red);"
+                          onclick="removeListItem(this, '{{ field_key }}', '{{ p.id }}')">✕</button>
+                </div>
+                {% endfor %}
+              </div>
+              <button class="btn btn-secondary" style="font-size:10px;padding:2px 8px;margin-top:3px;"
+                      onclick="addListItem('{{ field_key }}', '{{ p.id }}')">+ {% if language == 'zh' %}添加{% else %}Add{% endif %}</button>
+            </div>
+            {% endfor %}
+          </div>
+
+          <!-- Right column: VP fields -->
+          <div>
+            <div class="form-group" style="margin-bottom:8px;">
+              <label style="font-size:11px;color:var(--slate);">{% if language == 'zh' %}VP 标题{% else %}VP Headline{% endif %}</label>
+              <input type="text" class="form-control form-control-sm" value="{{ p.vp_headline or '' }}"
+                     data-field="vp_headline" data-persona-id="{{ p.id }}" onblur="scheduleSave()">
+            </div>
+            <div class="form-group" style="margin-bottom:8px;">
+              <label style="font-size:11px;color:var(--slate);">{% if language == 'zh' %}VP 论证{% else %}VP Argument{% endif %}</label>
+              <textarea class="form-control form-control-sm" rows="3" style="font-size:12px;"
+                        data-field="vp_argument" data-persona-id="{{ p.id }}" onblur="scheduleSave()">{{ p.vp_argument or '' }}</textarea>
+            </div>
+            {% if p.vp_proof_points %}
+            <div class="form-group" style="margin-bottom:8px;">
+              <label style="font-size:11px;color:var(--slate);">{% if language == 'zh' %}证明点{% else %}Proof Points{% endif %}</label>
+              {% for pp in p.vp_proof_points %}
+              <div style="font-size:12px;padding:3px 0;border-bottom:1px solid var(--line);">✓ {{ pp }}</div>
+              {% endfor %}
+            </div>
+            {% endif %}
+            {% if p.vp_competitor_comparison %}
+            <div class="form-group" style="margin-bottom:8px;">
+              <label style="font-size:11px;color:var(--slate);">{% if language == 'zh' %}竞品对比{% else %}Competitor Comparison{% endif %}</label>
+              {% for comp_name, comp_text in p.vp_competitor_comparison.items() %}
+              <div style="font-size:11px;padding:3px 0;border-bottom:1px solid var(--line);">
+                <strong>{{ comp_name }}:</strong> {{ comp_text[:100] }}
+              </div>
+              {% endfor %}
+            </div>
+            {% endif %}
+            <div class="form-group" style="margin-bottom:8px;">
+              <label style="font-size:11px;color:var(--slate);">{% if language == 'zh' %}价值主张（旧版兼容）{% else %}Value Proposition (legacy){% endif %}</label>
+              <textarea class="form-control form-control-sm" rows="2" style="font-size:12px;"
+                        data-field="value_proposition" data-persona-id="{{ p.id }}" onblur="scheduleSave()">{{ p.value_proposition or '' }}</textarea>
+            </div>
+            {% if p.daily_tasks %}
+            <div style="font-size:11px;color:var(--slate);margin-top:8px;">
+              <strong>{% if language == 'zh' %}日常任务：{% else %}Daily Tasks:{% endif %}</strong>
+              {% for t in p.daily_tasks %}<div style="padding:2px 0;">• {{ t }}</div>{% endfor %}
+            </div>
+            {% endif %}
+          </div>
+        </div>
+      </div>
     </div>
-    <div class="card-body">
-      {% for p in campaign.personas %}
-      <div style="padding:12px;border:1px solid var(--line);border-radius:8px;margin-bottom:10px;">
-        <strong>{{ p.name }}</strong> —
-        <span class="chip chip-{{ 'strong' if p.decision_weight == 'high' else 'moderate' if p.decision_weight == 'medium' else 'weak' }}">{{ p.layer }}</span>
-        <p style="color:var(--slate);font-size:13px;margin-top:4px;">{{ p.value_proposition[:120] }}{% if p.value_proposition|length > 120 %}...{% endif %}</p>
+    {% endfor %}
+  </div>
+
+  <!-- ── Question CRUD ── -->
+  <div style="margin-top:28px;">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+      <h3 style="font-size:16px;color:var(--navy);margin:0;">
+        📋 {% if language == 'zh' %}Benchmark Questions（{{ campaign.questions|length }} 个）{% else %}Benchmark Questions ({{ campaign.questions|length }}){% endif %}
+      </h3>
+      <button class="btn btn-secondary" style="font-size:12px;padding:4px 12px;" onclick="addQuestion()">
+        + {% if language == 'zh' %}添加问题{% else %}Add Question{% endif %}
+      </button>
+    </div>
+
+    <div id="questions-container">
+      {% for q in campaign.questions %}
+      <div class="question-row" id="question-row-{{ q.id }}"
+           style="display:flex;gap:10px;padding:10px 12px;border:1px solid var(--line);border-radius:8px;margin-bottom:8px;align-items:flex-start;">
+        <span style="font-weight:700;color:var(--blue);min-width:28px;padding-top:6px;">{{ q.id }}</span>
+        <div style="flex:1;">
+          <input type="text" class="form-control form-control-sm" value="{{ q.text }}"
+                 data-field="text" data-question-id="{{ q.id }}" onblur="scheduleSave()"
+                 style="margin-bottom:4px;font-size:13px;">
+          <div style="display:flex;gap:8px;align-items:center;">
+            <select class="form-control form-control-sm" data-field="category" data-question-id="{{ q.id }}"
+                    onchange="scheduleSave()" style="font-size:11px;width:auto;">
+              <option value="category_awareness" {{ 'selected' if q.category == 'category_awareness' }}>{% if language == 'zh' %}品类认知{% else %}Awareness{% endif %}</option>
+              <option value="selection" {{ 'selected' if q.category == 'selection' }}>{% if language == 'zh' %}选型{% else %}Selection{% endif %}</option>
+              <option value="implementation" {{ 'selected' if q.category == 'implementation' }}>{% if language == 'zh' %}实施{% else %}Implementation{% endif %}</option>
+              <option value="cost" {{ 'selected' if q.category == 'cost' }}>{% if language == 'zh' %}成本{% else %}Cost{% endif %}</option>
+            </select>
+            <select class="form-control form-control-sm" data-field="diagnostic_value" data-question-id="{{ q.id }}"
+                    onchange="scheduleSave()" style="font-size:11px;width:auto;">
+              <option value="high" {{ 'selected' if q.diagnostic_value == 'high' }}>High ★</option>
+              <option value="medium" {{ 'selected' if q.diagnostic_value == 'medium' }}>Medium</option>
+              <option value="low" {{ 'selected' if q.diagnostic_value == 'low' }}>Low</option>
+            </select>
+            <span style="font-size:10px;color:var(--slate);">
+              {{ q.search_intent or '' }}{% if q.search_volume_estimate %} · {{ q.search_volume_estimate }}{% endif %}
+            </span>
+          </div>
+          {% if q.related_questions %}
+          <div style="font-size:10px;color:var(--slate);margin-top:4px;">
+            {% if language == 'zh' %}关联：{% else %}Related: {% endif %}
+            {% for rq in q.related_questions %}
+            <span style="background:var(--line);padding:1px 6px;border-radius:10px;margin-right:4px;">{{ rq[:40] }}</span>
+            {% endfor %}
+          </div>
+          {% endif %}
+        </div>
+        <button class="btn btn-secondary" style="font-size:11px;padding:4px 8px;color:var(--red);flex-shrink:0;"
+                onclick="deleteQuestion('{{ q.id }}')">✕</button>
       </div>
       {% endfor %}
     </div>
   </div>
+
+  <div id="save-indicator-inline" style="font-size:11px;color:var(--slate);text-align:right;margin-top:8px;display:none;">
+    💾 {% if language == 'zh' %}已保存{% else %}Saved{% endif %}
+  </div>
+
   {% endif %}
 
 </div>
@@ -73,6 +270,211 @@
 
 {% block extra_js %}
 <script>
+// ── Persona expand/collapse ──
+function togglePersona(pid) {
+  const details = document.getElementById('persona-details-' + pid);
+  const chevron = document.getElementById('persona-chevron-' + pid);
+  if (details.style.display === 'none') {
+    details.style.display = 'block';
+    chevron.textContent = '▼';
+  } else {
+    details.style.display = 'none';
+    chevron.textContent = '▶';
+  }
+}
+
+// ── Debounced auto-save ──
+let saveTimer = null;
+function scheduleSave() {
+  clearTimeout(saveTimer);
+  saveTimer = setTimeout(saveAll, 800);
+}
+
+async function saveAll() {
+  const campaignId = '{{ campaign_id }}';
+
+  // Collect personas from DOM
+  const personas = [];
+  document.querySelectorAll('[data-persona-id]').forEach(input => {
+    const pid = input.dataset.personaId;
+    const field = input.dataset.field;
+    const index = input.dataset.index;
+    let persona = personas.find(p => p.id === pid);
+
+    if (!persona) {
+      persona = { id: pid };
+      personas.push(persona);
+    }
+
+    if (index !== undefined) {
+      // List item
+      if (!persona[field]) persona[field] = [];
+      persona[field][parseInt(index)] = input.value;
+    } else {
+      persona[field] = input.tagName === 'SELECT' ? input.value : input.value;
+    }
+  });
+
+  // Collect questions from DOM
+  const questions = [];
+  document.querySelectorAll('[data-question-id]').forEach(input => {
+    const qid = input.dataset.questionId;
+    const field = input.dataset.field;
+    let q = questions.find(q => q.id === qid);
+    if (!q) {
+      q = { id: qid };
+      questions.push(q);
+    }
+    q[field] = input.tagName === 'SELECT' ? input.value : input.value;
+  });
+
+  try {
+    const body = {};
+    if (personas.length > 0) body.personas = personas;
+    if (questions.length > 0) body.questions = questions;
+
+    await apiFetch('/api/campaigns/' + campaignId + '/persona', {
+      method: 'PUT',
+      body: JSON.stringify(body),
+    });
+
+    // Flash save indicator
+    const indicator = document.getElementById('save-indicator-inline');
+    if (indicator) {
+      indicator.style.display = 'block';
+      setTimeout(() => { indicator.style.display = 'none'; }, 1500);
+    }
+  } catch (err) {
+    console.warn('Auto-save failed:', err);
+  }
+}
+
+// ── List item management ──
+function addListItem(fieldKey, personaId) {
+  const container = document.getElementById('list-' + fieldKey + '-' + personaId);
+  if (!container) return;
+  const idx = container.children.length;
+  const div = document.createElement('div');
+  div.style.cssText = 'display:flex;gap:4px;';
+  div.innerHTML = '<input type="text" class="form-control form-control-sm" data-field="' + fieldKey + '" data-persona-id="' + personaId + '" data-index="' + idx + '" onblur="scheduleSave()" style="flex:1;">'
+    + '<button class="btn btn-secondary" style="font-size:10px;padding:1px 5px;color:var(--red);" onclick="removeListItem(this,\'' + fieldKey + '\',\'' + personaId + '\')">✕</button>';
+  container.appendChild(div);
+  scheduleSave();
+}
+
+function removeListItem(btn, fieldKey, personaId) {
+  btn.parentElement.remove();
+  // Re-index remaining items
+  const container = document.getElementById('list-' + fieldKey + '-' + personaId);
+  if (container) {
+    Array.from(container.children).forEach((child, i) => {
+      const input = child.querySelector('input');
+      if (input) input.dataset.index = i;
+    });
+  }
+  scheduleSave();
+}
+
+// ── Persona CRUD ──
+function addPersona() {
+  const newId = 'p_' + Date.now();
+  const lang = '{{ language }}';
+  const nameDefault = lang === 'zh' ? '新 Persona' : 'New Persona';
+  const container = document.getElementById('persona-container');
+  if (!container) return;
+
+  const div = document.createElement('div');
+  div.className = 'card persona-card';
+  div.id = 'persona-card-' + newId;
+  div.style.cssText = 'margin-bottom:14px;';
+  div.innerHTML = `
+    <div class="card-header" style="display:flex;justify-content:space-between;align-items:center;cursor:pointer;"
+         onclick="togglePersona('${newId}')">
+      <div style="display:flex;align-items:center;gap:10px;">
+        <span id="persona-chevron-${newId}" style="font-size:12px;">▶</span>
+        <strong style="font-size:14px;">${nameDefault}</strong>
+        <span class="chip chip-moderate" style="font-size:11px;">${lang === 'zh' ? '实践者' : 'Practitioner'}</span>
+      </div>
+      <button class="btn btn-secondary" style="font-size:11px;padding:2px 8px;color:var(--red);"
+              onclick="event.stopPropagation();deletePersona('${newId}')">✕</button>
+    </div>
+    <div class="card-body persona-details" id="persona-details-${newId}" style="display:none;">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+        <div>
+          <div class="form-group" style="margin-bottom:8px;">
+            <label style="font-size:11px;color:var(--slate);">${lang === 'zh' ? '名称' : 'Name'}</label>
+            <input type="text" class="form-control form-control-sm" value="${nameDefault}"
+                   data-field="name" data-persona-id="${newId}" onblur="scheduleSave()">
+          </div>
+          <div class="form-group" style="margin-bottom:8px;">
+            <label style="font-size:11px;color:var(--slate);">${lang === 'zh' ? '层级' : 'Layer'}</label>
+            <select class="form-control form-control-sm" data-field="layer" data-persona-id="${newId}" onchange="scheduleSave()">
+              <option value="decision_maker">${lang === 'zh' ? '决策者' : 'Decision Maker'}</option>
+              <option value="practitioner" selected>${lang === 'zh' ? '实践者' : 'Practitioner'}</option>
+              <option value="influencer">${lang === 'zh' ? '影响者' : 'Influencer'}</option>
+            </select>
+          </div>
+        </div>
+      </div>
+    </div>`;
+  container.appendChild(div);
+  scheduleSave();
+}
+
+function deletePersona(pid) {
+  if (!confirm('{{ "确认删除此 Persona？" if language == "zh" else "Confirm delete this persona?" }}')) return;
+  const card = document.getElementById('persona-card-' + pid);
+  if (card) card.remove();
+  scheduleSave();
+}
+
+// ── Question CRUD ──
+function addQuestion() {
+  const existing = document.querySelectorAll('.question-row');
+  const newId = 'q' + (existing.length + 1);
+  const container = document.getElementById('questions-container');
+  if (!container) return;
+
+  const div = document.createElement('div');
+  div.className = 'question-row';
+  div.id = 'question-row-' + newId;
+  div.style.cssText = 'display:flex;gap:10px;padding:10px 12px;border:1px solid var(--line);border-radius:8px;margin-bottom:8px;align-items:flex-start;';
+  div.innerHTML = `
+    <span style="font-weight:700;color:var(--blue);min-width:28px;padding-top:6px;">${newId}</span>
+    <div style="flex:1;">
+      <input type="text" class="form-control form-control-sm" placeholder="{{ '输入问题...' if language == 'zh' else 'Enter question...' }}"
+             data-field="text" data-question-id="${newId}" onblur="scheduleSave()"
+             style="margin-bottom:4px;font-size:13px;">
+      <div style="display:flex;gap:8px;align-items:center;">
+        <select class="form-control form-control-sm" data-field="category" data-question-id="${newId}"
+                onchange="scheduleSave()" style="font-size:11px;width:auto;">
+          <option value="category_awareness">{{ '品类认知' if language == 'zh' else 'Awareness' }}</option>
+          <option value="selection">{{ '选型' if language == 'zh' else 'Selection' }}</option>
+          <option value="implementation">{{ '实施' if language == 'zh' else 'Implementation' }}</option>
+          <option value="cost">{{ '成本' if language == 'zh' else 'Cost' }}</option>
+        </select>
+        <select class="form-control form-control-sm" data-field="diagnostic_value" data-question-id="${newId}"
+                onchange="scheduleSave()" style="font-size:11px;width:auto;">
+          <option value="high">High ★</option>
+          <option value="medium" selected>Medium</option>
+          <option value="low">Low</option>
+        </select>
+      </div>
+    </div>
+    <button class="btn btn-secondary" style="font-size:11px;padding:4px 8px;color:var(--red);flex-shrink:0;"
+            onclick="deleteQuestion('${newId}')">✕</button>`;
+  container.appendChild(div);
+  scheduleSave();
+}
+
+function deleteQuestion(qid) {
+  if (!confirm('{{ "确认删除此问题？" if language == "zh" else "Confirm delete this question?" }}')) return;
+  const row = document.getElementById('question-row-' + qid);
+  if (row) row.remove();
+  scheduleSave();
+}
+
+// ── Persona Generation (unchanged flow) ──
 async function generatePersona() {
   const loading = document.getElementById('llm-loading');
   if (loading) loading.style.display = 'flex';
@@ -81,11 +483,10 @@ async function generatePersona() {
     await apiFetch('/api/campaigns/{{ campaign_id }}/persona/generate', { method: 'POST' });
     window.location.reload();
   } catch (err) {
-    alert('Generation failed: ' + err.message);
+    alert('{{ "生成失败：" if language == "zh" else "Generation failed: " }}' + err.message);
   } finally {
     if (loading) loading.style.display = 'none';
   }
 }
-
 </script>
 {% endblock %}

@@ -159,8 +159,25 @@ async def generate_campaign_plan(
             or inner.get("ninety_day_timeline", [])
         ),
         "monitoring_metrics": inner.get("monitoring_metrics", []),
+        "content_strategy_summary": inner.get("content_strategy_summary", ""),
     }
     plan_json = merged
+
+    # ── Post-process: Recalculate priority from 3D scores ──
+    # LLMs can produce inconsistent priority labels — recalculate deterministically:
+    #   P0: strategic_importance ≥ 4 AND winnability ≥ 3 AND st_current_strength ≤ 2
+    #   P1: strategic_importance ≥ 3 OR (winnability ≥ 3 AND st_current_strength ≤ 3)
+    #   P2: everything else
+    for item in plan_json.get("priorities", []):
+        si = item.get("strategic_importance", 0) or 0
+        scs = item.get("st_current_strength", 0) or 0
+        w = item.get("winnability", 0) or 0
+        if si >= 4 and w >= 3 and scs <= 2:
+            item["priority"] = "P0"
+        elif si >= 3 or (w >= 3 and scs <= 3):
+            item["priority"] = "P1"
+        else:
+            item["priority"] = "P2"
 
     # Attach metadata about the generation process
     plan_json["_generation_meta"] = {

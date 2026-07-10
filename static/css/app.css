@@ -381,10 +381,54 @@ textarea.form-control { min-height: 80px; resize: vertical; }
 /* ── Export Buttons ── */
 .export-actions { display: flex; gap: 8px; flex-wrap: wrap; }
 
+/* ── Plan Grid (competitor cards) ── */
+.plan-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 12px;
+}
+
+/* ── Timeline Grid ── */
+.timeline-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 12px;
+}
+
+/* ── Form Control Size Variants ── */
+.form-control-sm {
+  padding: 6px 10px;
+  font-size: 12px;
+  border-radius: 4px;
+}
+.form-control-lg {
+  padding: 14px 18px;
+  font-size: 15px;
+  border-radius: 8px;
+  line-height: 1.8;
+}
+
+/* ── Persona Cards ── */
+.persona-card .card-header {
+  background: var(--paper);
+  color: var(--ink);
+  border-bottom: 1px solid var(--line);
+}
+.persona-card .card-header:hover {
+  background: #EEF2F7;
+}
+.persona-details label {
+  text-transform: none;
+  letter-spacing: 0;
+  margin-bottom: 3px;
+}
+
 /* ── Responsive ── */
 @media (max-width: 768px) {
   .tab-nav { overflow-x: auto; padding: 0 12px; }
   .main-content { padding: 20px 12px 80px; }
   .bar-row { grid-template-columns: 130px 1fr 60px; }
   .footer-nav { padding: 10px 12px; flex-direction: column; gap: 8px; }
+  .timeline-grid { grid-template-columns: repeat(2, 1fr); }
+  .plan-grid { grid-template-columns: 1fr; }
 }

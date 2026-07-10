@@ -73,12 +73,12 @@ Each battle card JSON format:
   "gap_type": "open_gap | rival_owned | not_linked | buried_in_pdf",
   "content_plan": [
     {
-      "format": "linkedin_article | technical_blog | comparison_article | infographic | video_script | email_nurture | webinar | technical_whitepaper | case_study | cost_benefit_analysis | bing_ads",
+      "format": "linkedin_article | bing_ads",
       "channel": "LinkedIn | Medium | YouTube | Email | Bing Ads | Reddit",
       "channel_type": "organic | paid",
       "target_persona_id": "prac_architect",
       "title_suggestion": "Article/content title suggestion (under 15 words)",
-      "llm_prompt": "Complete LLM prompt usable for generating this content (100-200 words), including role, target reader, core argument, style requirements"
+      "content_brief": "Content editing guidance (80-150 words), containing core argument, must-cover differentiation points, target question text — NOT a standalone prompt. The downstream content generator will combine this with the format-specific template into a complete prompt"
     }
   ]
 }
@@ -89,7 +89,7 @@ Each battle card JSON format:
 - Ensure each target persona is covered by at least 1 content item
 - channel_type must be "organic" or "paid"
 - format must use one of the enumerated values above — do not invent new ones
-- llm_prompt must be a complete, copy-paste-ready prompt, not a brief description
+- content_brief is content editing guidance (core argument + differentiation points + target question) — downstream combines with format template
 
 ### 4. 90-Day Timeline (timeline_90days)
 
@@ -173,7 +173,7 @@ Your response must be exactly ONE ```json code block:
           "channel_type": "organic",
           "target_persona_id": "prac_architect",
           "title_suggestion": "Complete title suggestion",
-          "llm_prompt": "Complete copy-paste-ready LLM prompt"
+          "content_brief": "Content editing guidance: core argument, differentiation points, target question"
         }
       ]
     }
@@ -209,8 +209,8 @@ Your response must be exactly ONE ```json code block:
 
 **Field Constraints**:
 - `priorities` must cover ALL questions from the analysis input — P2 can be simplified but must not be omitted
-- Each `content_plan` entry must contain all 6 fields (format, channel, channel_type, target_persona_id, title_suggestion, llm_prompt)
-- `llm_prompt` must not be empty or a placeholder — it must be a complete, usable prompt
+- Each `content_plan` entry must contain all 6 fields (format, channel, channel_type, target_persona_id, title_suggestion, content_brief)
+- `content_brief` must not be empty or a placeholder — it must contain core argument and differentiation points
 - `timeline_90days` must have exactly 4 phases
 - `monitoring_metrics` must cover all P0 and P1 questions
 - `content_strategy_summary` must not be empty

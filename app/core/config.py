@@ -15,6 +15,9 @@ class Settings(BaseSettings):
     kimi_api_key: str = ""
     kimi_base_url: str = "https://api.moonshot.cn/v1"
 
+    # External tool URLs
+    geo_hub_url: str = "https://geo-strategic-hub-969835621169.asia-east1.run.app/"
+
     # Default language
     default_language: str = "zh"
 

@@ -87,8 +87,8 @@ Each Question JSON format:
   "category": "category_awareness | selection | implementation | cost",
   "target_persona_ids": ["prac_architect"],
   "diagnostic_value": "high | medium | low",
-  "source_platform": "Reddit | Stack Overflow | LinkedIn | Quora | EETimes | YouTube",
-  "source_heat": "High | Medium | Low — approximate discussion volume in the community"
+  "assumed_platform": "Reddit | Stack Overflow | LinkedIn | Quora | EETimes | YouTube",
+  "assumed_heat": "High | Medium | Low — assumed discussion volume based on industry experience, not measured (label as assumed when grounding unavailable)"
 }
 ```
 
@@ -135,8 +135,8 @@ Your response must be exactly ONE ```json code block with the following top-leve
       "category": "selection",
       "target_persona_ids": ["prac_architect"],
       "diagnostic_value": "high",
-      "source_platform": "Reddit",
-      "source_heat": "High"
+      "assumed_platform": "Reddit",
+      "assumed_heat": "High"
     }
   ]
 }

@@ -11,7 +11,8 @@ class ContentAction(BaseModel):
     channel_type: Literal["organic", "paid"] = "organic"
     target_persona_id: str = ""
     title_suggestion: str = ""
-    llm_prompt: str = ""
+    content_brief: str = ""
+    llm_prompt: str = ""  # DEPRECATED: use content_brief instead. Kept for backward compat with old plans.
 
 
 class PriorityItem(BaseModel):
