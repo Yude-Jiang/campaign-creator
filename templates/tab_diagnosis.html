@@ -90,7 +90,7 @@
            ondrop="handleDrop(event, '{{ q.id }}')">
         <input type="file" accept=".md,.html,.htm,.txt" style="display:none;"
                id="file-input-{{ q.id }}"
-               onchange="handleFileSelect(this, '{{ q.id }}')">
+              >
         <div id="file-status-{{ q.id }}" style="font-size:12px;min-height:18px;">
           {% set diag = campaign.diagnoses | selectattr('question_id', 'equalto', q.id) | list | first %}
           {% if diag %}
@@ -134,6 +134,19 @@
 
 {% block extra_js %}
 <script>
+// Attach change listeners to all file inputs (more reliable than inline onchange)
+document.querySelectorAll('input[type="file"][id^="file-input-"]').forEach(function(input) {
+  input.addEventListener('change', function() {
+    const qid = this.id.replace('file-input-', '');
+    const file = this.files[0];
+    if (file) {
+      uploadFile(file, qid);
+      // Reset so the same file can be selected again
+      this.value = '';
+    }
+  });
+});
+
 async function handleDrop(e, questionId) {
   e.preventDefault();
   e.currentTarget.classList.remove('dragover');
@@ -141,53 +154,48 @@ async function handleDrop(e, questionId) {
   if (file) await uploadFile(file, questionId);
 }
 
-async function handleFileSelect(input, questionId) {
-  const file = input.files[0];
-  if (file) await uploadFile(file, questionId);
-}
-
 async function uploadFile(file, questionId) {
-  const nameLower = file.name.toLowerCase();
+  var nameLower = file.name.toLowerCase();
   if (!nameLower.endsWith('.md') && !nameLower.endsWith('.html') && !nameLower.endsWith('.htm') && !nameLower.endsWith('.txt')) {
     alert('{% if language == "zh" %}请上传 .md、.html 或 .txt 文件{% else %}Please upload .md, .html, or .txt files{% endif %}');
     return;
   }
 
-  const formData = new FormData();
+  var formData = new FormData();
   formData.append('file', file);
 
-  const statusEl = document.getElementById('file-status-' + questionId);
+  var statusEl = document.getElementById('file-status-' + questionId);
   if (statusEl) statusEl.innerHTML = '<span style="color:var(--blue);">⏳ {% if language == "zh" %}上传中...{% else %}Uploading...{% endif %}</span>';
 
   try {
-    const resp = await fetch('/api/campaigns/{{ campaign_id }}/diagnosis/upload?question_id=' + encodeURIComponent(questionId), {
+    var resp = await fetch('/api/campaigns/{{ campaign_id }}/diagnosis/upload?question_id=' + encodeURIComponent(questionId), {
       method: 'POST',
       body: formData,
     });
     if (!resp.ok) {
-      const errData = await resp.json().catch(() => ({ detail: 'HTTP ' + resp.status }));
+      var errData = await resp.json().catch(function() { return { detail: 'HTTP ' + resp.status }; });
       throw new Error(errData.detail || 'Upload failed');
     }
-    const data = await resp.json();
+    var data = await resp.json();
     if (statusEl) {
       statusEl.innerHTML = '<span style="color:var(--green);font-weight:500;">✅ ' + file.name + '</span>'
         + '<span style="color:var(--slate);font-size:10px;display:block;">' + new Date().toISOString().slice(0, 16) + '</span>';
     }
     // Update progress bar
-    const progressBar = document.getElementById('diag-progress-bar');
+    var progressBar = document.getElementById('diag-progress-bar');
     if (progressBar) {
-      const currentWidth = parseFloat(progressBar.style.width) || 0;
-      const step = 100 / {{ recommended }};
+      var currentWidth = parseFloat(progressBar.style.width) || 0;
+      var step = 100 / {{ recommended }};
       progressBar.style.width = Math.min(currentWidth + step, 100) + '%';
       if (parseFloat(progressBar.style.width) >= 100) {
         progressBar.style.background = 'var(--green)';
       }
     }
-    // Enable the footer button if it was disabled
-    const nextBtn = document.querySelector('.footer-actions .btn-primary, #panel-diagnosis ~ div .btn-primary');
+    // Enable the Next button
+    var nextBtn = document.querySelector('.footer-actions .btn-primary');
     if (nextBtn && nextBtn.disabled) {
       nextBtn.disabled = false;
-      const tip = nextBtn.parentElement.querySelector('span');
+      var tip = nextBtn.parentElement.querySelector('span');
       if (tip) tip.style.display = 'none';
     }
   } catch (err) {
