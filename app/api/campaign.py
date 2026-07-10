@@ -93,7 +93,7 @@ def get_campaign(campaign_id: str):
     """Get a campaign by ID."""
     data = load_campaign_json(campaign_id)
     if not data:
-        raise HTTPException(status_code=404, detail="Campaign not found")
+        raise HTTPException(status_code=404, detail="Campaign 不存在 | Campaign not found")
     return data
 
 
@@ -103,7 +103,7 @@ def update_campaign(campaign_id: str, data: dict):
     with campaign_lock(campaign_id):
         existing = load_campaign_json(campaign_id)
         if not existing:
-            raise HTTPException(status_code=404, detail="Campaign not found")
+            raise HTTPException(status_code=404, detail="Campaign 不存在 | Campaign not found")
         # Basic validation: require at minimum the structural fields
         if not isinstance(data, dict):
             raise HTTPException(status_code=400, detail="Request body must be a JSON object")
@@ -122,7 +122,7 @@ def advance_tab(campaign_id: str, tab: int):
     with campaign_lock(campaign_id):
         data = load_campaign_json(campaign_id)
         if not data:
-            raise HTTPException(status_code=404, detail="Campaign not found")
+            raise HTTPException(status_code=404, detail="Campaign 不存在 | Campaign not found")
         data["current_tab"] = tab
         data["updated_at"] = datetime.now().isoformat()
         save_campaign_json(campaign_id, data)
@@ -155,7 +155,7 @@ async def upload_diagnosis(campaign_id: str, file: UploadFile = File(...), quest
     with campaign_lock(campaign_id):
         data = load_campaign_json(campaign_id)
         if not data:
-            raise HTTPException(status_code=404, detail="Campaign not found")
+            raise HTTPException(status_code=404, detail="Campaign 不存在 | Campaign not found")
 
         saved_path = save_diagnosis_file(campaign_id, question_id, content, file.filename or f"{question_id}.md")
 
@@ -189,7 +189,7 @@ def diagnosis_status(campaign_id: str):
     """Get diagnosis upload status (which questions have files)."""
     data = load_campaign_json(campaign_id)
     if not data:
-        raise HTTPException(status_code=404, detail="Campaign not found")
+        raise HTTPException(status_code=404, detail="Campaign 不存在 | Campaign not found")
 
     questions = data.get("questions", [])
     diagnoses = data.get("diagnoses", [])
@@ -214,7 +214,7 @@ async def generate_persona(campaign_id: str):
     with campaign_lock(campaign_id):
         data = load_campaign_json(campaign_id)
         if not data:
-            raise HTTPException(status_code=404, detail="Campaign not found")
+            raise HTTPException(status_code=404, detail="Campaign 不存在 | Campaign not found")
         language = data.get("language", "zh")
 
     from app.services.persona_service import generate_personas_and_questions
@@ -226,7 +226,7 @@ async def generate_persona(campaign_id: str):
     with campaign_lock(campaign_id):
         data = load_campaign_json(campaign_id)
         if not data:
-            raise HTTPException(status_code=404, detail="Campaign not found")
+            raise HTTPException(status_code=404, detail="Campaign 不存在 | Campaign not found")
         data["personas"] = result.get("personas", [])
         data["questions"] = result.get("questions", [])
         data["grounding_sources"] = result.get("grounding_sources", [])
@@ -276,7 +276,7 @@ def update_persona(campaign_id: str, body: PersonaUpdateRequest):
     with campaign_lock(campaign_id):
         data = load_campaign_json(campaign_id)
         if not data:
-            raise HTTPException(status_code=404, detail="Campaign not found")
+            raise HTTPException(status_code=404, detail="Campaign 不存在 | Campaign not found")
 
         if body.personas is not None:
             existing_personas = {p.get("id"): p for p in data.get("personas", []) if p.get("id")}
@@ -327,7 +327,7 @@ def delete_question(campaign_id: str, question_id: str):
     with campaign_lock(campaign_id):
         data = load_campaign_json(campaign_id)
         if not data:
-            raise HTTPException(status_code=404, detail="Campaign not found")
+            raise HTTPException(status_code=404, detail="Campaign 不存在 | Campaign not found")
 
         questions = data.get("questions", [])
         target = next((q for q in questions if q.get("id") == question_id), None)
@@ -360,7 +360,7 @@ async def generate_plan(campaign_id: str):
     with campaign_lock(campaign_id):
         data = load_campaign_json(campaign_id)
         if not data:
-            raise HTTPException(status_code=404, detail="Campaign not found")
+            raise HTTPException(status_code=404, detail="Campaign 不存在 | Campaign not found")
         language = data.get("language", "zh")
 
     from app.services.plan_service import generate_campaign_plan
@@ -377,7 +377,7 @@ async def generate_plan(campaign_id: str):
     with campaign_lock(campaign_id):
         data = load_campaign_json(campaign_id)
         if not data:
-            raise HTTPException(status_code=404, detail="Campaign not found")
+            raise HTTPException(status_code=404, detail="Campaign 不存在 | Campaign not found")
         data["plan"] = plan
         data["updated_at"] = datetime.now().isoformat()
         save_campaign_json(campaign_id, data)
@@ -395,7 +395,7 @@ def export_plan_markdown(campaign_id: str, lang: str = Query("zh")):
     """Export campaign plan as Markdown."""
     data = load_campaign_json(campaign_id)
     if not data:
-        raise HTTPException(status_code=404, detail="Campaign not found")
+        raise HTTPException(status_code=404, detail="Campaign 不存在 | Campaign not found")
 
     plan = data.get("plan", {})
     if not plan:
@@ -416,7 +416,7 @@ def export_plan_html(campaign_id: str, lang: str = Query("zh")):
     """Export campaign plan as styled HTML report."""
     data = load_campaign_json(campaign_id)
     if not data:
-        raise HTTPException(status_code=404, detail="Campaign not found")
+        raise HTTPException(status_code=404, detail="Campaign 不存在 | Campaign not found")
 
     plan = data.get("plan", {})
     if not plan:
@@ -454,7 +454,7 @@ def update_data_assets(campaign_id: str, body: DataAssetsUpdateRequest):
     with campaign_lock(campaign_id):
         data = load_campaign_json(campaign_id)
         if not data:
-            raise HTTPException(status_code=404, detail="Campaign not found")
+            raise HTTPException(status_code=404, detail="Campaign 不存在 | Campaign not found")
         now = datetime.now().isoformat()
         for a in body.data_assets:
             if not a.get("added_at"):
@@ -484,7 +484,7 @@ def compose_content_prompt(campaign_id: str, body: ContentGenerateRequest):
     """
     data = load_campaign_json(campaign_id)
     if not data:
-        raise HTTPException(status_code=404, detail="Campaign not found")
+        raise HTTPException(status_code=404, detail="Campaign 不存在 | Campaign not found")
 
     from app.services.content_service import compose_prompt
 
@@ -518,7 +518,7 @@ async def generate_content(campaign_id: str, body: ContentGenerateRequest):
     with campaign_lock(campaign_id):
         data = load_campaign_json(campaign_id)
         if not data:
-            raise HTTPException(status_code=404, detail="Campaign not found")
+            raise HTTPException(status_code=404, detail="Campaign 不存在 | Campaign not found")
         language = data.get("language", "zh")
 
     from app.services.content_service import generate_content as generate_content_item
@@ -540,7 +540,7 @@ async def generate_content(campaign_id: str, body: ContentGenerateRequest):
     with campaign_lock(campaign_id):
         data = load_campaign_json(campaign_id)
         if not data:
-            raise HTTPException(status_code=404, detail="Campaign not found")
+            raise HTTPException(status_code=404, detail="Campaign 不存在 | Campaign not found")
 
         plan = data.get("plan", {})
         priorities = plan.get("priorities", [])
@@ -578,7 +578,7 @@ def export_full_campaign(campaign_id: str):
     """Export the entire campaign as a JSON file for backup/transfer."""
     data = load_campaign_json(campaign_id)
     if not data:
-        raise HTTPException(status_code=404, detail="Campaign not found")
+        raise HTTPException(status_code=404, detail="Campaign 不存在 | Campaign not found")
 
     from fastapi.responses import Response
 

@@ -114,10 +114,10 @@ def _resolve_format(format_str: str) -> dict[str, str | bool]:
     return {"template_name": "content_zhihu_long.md", "task_key": "content_organic_chinese", "needs_keywords": False}
 
 
-def _find_persona(personas: list[dict], target_id: Any) -> dict:
+def _find_persona(personas: list[dict], target_id: Any, language: str = "zh") -> dict:
     """Find a persona by ID, with fallback handling for lists and missing matches."""
     if not personas:
-        return {"name": "技术决策者", "layer": "practitioner"}
+        return {"name": "技术决策者" if language == "zh" else "Technical Decision Maker", "layer": "practitioner"}
 
     # Handle target_persona_id being a list (from LLM output) or string
     lookup_id = target_id
@@ -196,7 +196,8 @@ def _build_content_variables(
     # Persona lookup
     personas = campaign_data.get("personas", [])
     target_id = content_item.get("target_persona_id", "")
-    persona = _find_persona(personas, target_id)
+    lang = campaign_data.get("language", "zh")
+    persona = _find_persona(personas, target_id, language=lang)
 
     # Question lookup
     questions = campaign_data.get("questions", [])
