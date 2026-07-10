@@ -79,6 +79,13 @@
           <span style="font-size:11px;color:var(--slate);">👤 {{ persona_name }}</span>
         </div>
 
+        {% if item.get('_fit_warning') %}
+        <div style="margin-bottom:8px;padding:8px 12px;background:#fffbeb;border:1px solid #fde68a;
+                    border-radius:6px;font-size:12px;color:#92400e;">
+          ⚠ {{ item._fit_warning }}
+        </div>
+        {% endif %}
+
         <p style="font-size:14px;font-weight:600;color:var(--navy);margin-bottom:8px;">
           {{ item.get('title_suggestion', '') }}
         </p>
@@ -169,6 +176,9 @@ async function generateContent(pi, ci) {
     // Build result HTML
     const html = `
       <div style="margin-top:8px;padding:16px;background:var(--paper);border-radius:8px;border:1px solid var(--blue);">
+        ${resp.channel_fit_warning ? `
+          <div style="margin-bottom:8px;padding:8px 12px;background:#fffbeb;border:1px solid #fde68a;
+                      border-radius:6px;font-size:12px;color:#92400e;">⚠ ${resp.channel_fit_warning}</div>` : ''}
         <div style="font-size:11px;color:var(--slate);margin-bottom:8px;display:flex;justify-content:space-between;">
           <span>{% if language == 'zh' %}已生成{% else %}Generated{% endif %} — ${resp.model}</span>
           <span>${new Date().toISOString().slice(0, 16)}</span>

@@ -420,6 +420,7 @@ async def generate_content(campaign_id: str, body: ContentGenerateRequest):
         "content": result["text"],
         "model": result["model"],
         "format": result.get("format", ""),
+        "channel_fit_warning": result.get("channel_fit_warning", ""),
     }
 
 

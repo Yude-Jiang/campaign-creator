@@ -11,6 +11,39 @@ from app.services.llm_router import llm_router
 
 logger = logging.getLogger(__name__)
 
+
+# ── Channel-Fit Soft Validation ──
+
+
+def check_channel_fit(persona: dict, channel: str, language: str = "zh") -> str:
+    """Soft channel-fit check. Returns warning text or "" (never raises, never blocks).
+
+    Data source is the persona's own avoid/preferred channel fields (inherited
+    from master persona skeletons via anchor). Personas without these fields
+    (legacy data, free-generated personas) silently pass.
+    """
+    if not persona or not channel:
+        return ""
+    avoid = persona.get("avoid_channels") or []
+    if not avoid:
+        return ""
+    # Substring match both directions — channel values are free-form CN/EN labels
+    hit = next((a for a in avoid if a and (a in channel or channel in a)), None)
+    if not hit:
+        return ""
+    preferred = persona.get("preferred_channels") or []
+    name = persona.get("name", "")
+    if language == "zh":
+        msg = f"渠道适配提示：受众「{name}」通常回避此类渠道（{hit}）。"
+        if preferred:
+            msg += f"该受众偏好渠道：{'、'.join(preferred[:4])}。可无视此提示继续生成。"
+    else:
+        msg = f"Channel-fit note: audience \"{name}\" typically avoids this channel type ({hit})."
+        if preferred:
+            msg += f" Preferred channels: {', '.join(preferred[:4])}. You may ignore this and generate anyway."
+    return msg
+
+
 # ── Format → Template Mapping ──
 # Ordered by specificity: more specific substrings checked first.
 # Each entry: (match_substrings, template_filename, task_key, needs_keywords)
@@ -179,6 +212,10 @@ async def generate_content(
         task_key,
     )
 
+    # ── Channel-fit soft check (T4.9) ──
+    channel = content_item.get("channel", "")
+    channel_fit_warning = check_channel_fit(persona, channel, language)
+
     # ── Call LLM Router ──
     result = await llm_router.route_and_generate(
         task=task_key,
@@ -193,4 +230,5 @@ async def generate_content(
         "model": result["model"],
         "format": format_str,
         "template": template_name,
+        "channel_fit_warning": channel_fit_warning,
     }

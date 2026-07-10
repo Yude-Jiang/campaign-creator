@@ -91,9 +91,27 @@ def campaign_view(request: Request, campaign_id: str, lang: str = Query("zh")):
             priorities,
             key=lambda p: priority_order.get(str(p.get("priority", "P2")), 99),
         )
-        extra_context["sorted_priorities"] = sorted_priorities
         # Build persona lookup map for name resolution
         persona_map = {p["id"]: p for p in data.get("personas", []) if p.get("id")}
+
+        # ── Compute channel-fit warnings (T4.9, transient — never persisted) ──
+        from app.services.content_service import check_channel_fit
+
+        lang = data.get("language", "zh")
+        for p in sorted_priorities:
+            for item in p.get("content_plan", []):
+                pid = item.get("target_persona_id", "")
+                # target_persona_id may be str or list — handle both
+                pids = [pid] if isinstance(pid, str) else (pid or [])
+                warnings = [
+                    w for w in (
+                        check_channel_fit(persona_map.get(x, {}), item.get("channel", ""), lang)
+                        for x in pids if x
+                    ) if w
+                ]
+                item["_fit_warning"] = warnings[0] if warnings else ""
+
+        extra_context["sorted_priorities"] = sorted_priorities
         extra_context["persona_map"] = persona_map
 
     return templates.TemplateResponse(
