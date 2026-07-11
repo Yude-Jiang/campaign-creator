@@ -95,6 +95,39 @@ FORMAT_MAPPING: list[tuple[list[str], str, str, bool]] = [
 ]
 
 
+# ── Format Options (for Custom Content UI) ──
+# Each entry maps to FORMAT_MAPPING above via key substring matching.
+# zh_platforms / en_platforms used by get_available_formats() for language filtering.
+
+FORMAT_OPTIONS: list[dict[str, str]] = [
+    {"key": "zhihu_long", "label_zh": "知乎长文", "label_en": "Zhihu Long-Form", "channel": "知乎", "channel_type": "organic"},
+    {"key": "zhihu_qa", "label_zh": "知乎问答", "label_en": "Zhihu Q&A", "channel": "知乎", "channel_type": "organic"},
+    {"key": "csdn", "label_zh": "CSDN 技术博客", "label_en": "CSDN Technical Blog", "channel": "CSDN", "channel_type": "organic"},
+    {"key": "bilibili", "label_zh": "B站视频脚本", "label_en": "Bilibili Video Script", "channel": "B站", "channel_type": "organic"},
+    {"key": "wechat", "label_zh": "微信公众号", "label_en": "WeChat Article", "channel": "微信", "channel_type": "organic"},
+    {"key": "email", "label_zh": "邮件培育序列", "label_en": "Email Nurture Series", "channel": "邮件", "channel_type": "organic"},
+    {"key": "baidu_sem", "label_zh": "百度竞价广告", "label_en": "Baidu SEM", "channel": "百度竞价", "channel_type": "paid"},
+    {"key": "baidu_feed", "label_zh": "百度信息流广告", "label_en": "Baidu Feed Ad", "channel": "百度信息流", "channel_type": "paid"},
+    {"key": "linkedin", "label_zh": "LinkedIn", "label_en": "LinkedIn", "channel": "LinkedIn", "channel_type": "organic"},
+    {"key": "bing", "label_zh": "Bing Ads", "label_en": "Bing Ads", "channel": "Bing", "channel_type": "paid"},
+]
+
+_ZH_PLATFORM_KEYS = {"zhihu_long", "zhihu_qa", "csdn", "bilibili", "wechat", "baidu_sem", "baidu_feed"}
+_EN_PLATFORM_KEYS = {"linkedin", "bing"}
+
+
+def get_available_formats(language: str = "zh") -> list[dict[str, str]]:
+    """Return FORMAT_OPTIONS filtered by campaign language.
+
+    Chinese campaigns hide LinkedIn/Bing (no zh templates).
+    English campaigns hide zhihu/csdn/bilibili/baidu/wechat (no en templates).
+    """
+    if language == "zh":
+        return [o for o in FORMAT_OPTIONS if o["key"] not in _EN_PLATFORM_KEYS]
+    else:
+        return [o for o in FORMAT_OPTIONS if o["key"] not in _ZH_PLATFORM_KEYS]
+
+
 def _resolve_format(format_str: str) -> dict[str, str | bool]:
     """Map a free-form format string to a prompt template and task key.
 
@@ -226,6 +259,15 @@ def _build_content_variables(
     variables["content_brief"] = content_brief_context
     variables["data_assets"] = campaign_data.get("data_assets", [])
 
+    # ── Inject persona-derived fields for richer prompt context (sliced to prevent bloat) ──
+    p = persona or {}
+    variables["persona_pain_points"] = p.get("pain_points", [])[:3]
+    variables["persona_vp_headline"] = p.get("vp_headline", "")
+    variables["persona_vp_argument"] = p.get("vp_argument", "")
+    variables["persona_objections"] = p.get("objections", [])[:2]
+    variables["persona_search_queries"] = p.get("search_queries", [])[:5]
+    variables["persona_info_channels"] = p.get("info_channels", [])[:3]
+
     return variables, content_item, format_str, template_name, task_key, needs_keywords
 
 
@@ -310,6 +352,148 @@ async def generate_content(
     )
 
     # ── T2: Pre-publish risk scan ──
+    data_assets = campaign_data.get("data_assets", [])
+    risk_scan = scan_content_risks(result["text"], data_assets, language)
+
+    return {
+        "text": result["text"],
+        "model": result["model"],
+        "format": format_str,
+        "template": template_name,
+        "channel_fit_warning": channel_fit_warning,
+        "risk_scan": risk_scan,
+    }
+
+
+# ── Custom Content (user-added, not plan-derived) ──
+
+
+def build_custom_content_variables(
+    campaign_data: dict,
+    content_index: int,
+) -> tuple[dict[str, Any], dict, str, str, str, bool]:
+    """Build Jinja2 variables for a custom content item.
+
+    Mirrors _build_content_variables but reads from campaign_data["custom_content"][content_index]
+    instead of plan.priorities[].content_plan[].
+    """
+    custom_content = campaign_data.get("custom_content", [])
+    if content_index < 0 or content_index >= len(custom_content):
+        raise ValueError(
+            f"content_index {content_index} out of range (0-{len(custom_content) - 1})"
+        )
+
+    item = custom_content[content_index]
+    format_str = item.get("format", "")
+    if not format_str:
+        raise ValueError("Custom content item has no format — cannot determine template")
+
+    # Resolve format to template
+    resolved = _resolve_format(format_str)
+    template_name = str(resolved["template_name"])
+    task_key = str(resolved["task_key"])
+    needs_keywords = bool(resolved["needs_keywords"])
+
+    # Gather template variables
+    brief = campaign_data.get("brief", {})
+
+    # Persona lookup
+    personas = campaign_data.get("personas", [])
+    target_id = item.get("target_persona_id", "")
+    lang = campaign_data.get("language", "zh")
+    persona = _find_persona(personas, target_id, language=lang)
+
+    # Question / topic lookup
+    question_id = item.get("question_id", "")
+    questions = campaign_data.get("questions", [])
+    question_text = _find_question(questions, question_id)
+    if not question_text:
+        question_text = item.get("topic", item.get("anchor_point", ""))
+
+    anchor_point = item.get("anchor_point", "") or item.get("topic", "")
+
+    # Build variables (same shape as _build_content_variables output)
+    variables: dict[str, Any] = {
+        "brief": brief,
+        "persona": persona,
+        "anchor_point": anchor_point,
+        "question_text": question_text,
+    }
+    if needs_keywords:
+        variables["keywords"] = brief.get("keywords", [])
+
+    variables["content_brief"] = item.get("content_brief", "") or item.get("topic", "")
+    variables["data_assets"] = campaign_data.get("data_assets", [])
+
+    # Inject persona-derived fields
+    p = persona or {}
+    variables["persona_pain_points"] = p.get("pain_points", [])[:3]
+    variables["persona_vp_headline"] = p.get("vp_headline", "")
+    variables["persona_vp_argument"] = p.get("vp_argument", "")
+    variables["persona_objections"] = p.get("objections", [])[:2]
+    variables["persona_search_queries"] = p.get("search_queries", [])[:5]
+    variables["persona_info_channels"] = p.get("info_channels", [])[:3]
+
+    return variables, item, format_str, template_name, task_key, needs_keywords
+
+
+def compose_custom_prompt(
+    campaign_data: dict,
+    content_index: int,
+    language: str = "zh",
+) -> dict[str, Any]:
+    """Compose the full prompt for a custom content item without calling the LLM."""
+    variables, _item, format_str, template_name, task_key, _ = \
+        build_custom_content_variables(campaign_data, content_index)
+
+    from app.services.llm_router import _jinja_env
+
+    template_path = f"{language}/{template_name}"
+    try:
+        tmpl = _jinja_env.get_template(template_path)
+    except Exception:
+        raise ValueError(
+            f"Template '{template_name}' not found for language '{language}'. "
+            f"This channel may not support the current campaign language."
+        )
+
+    rendered = tmpl.render(**variables)
+
+    return {
+        "prompt": rendered,
+        "template": template_name,
+        "format": format_str,
+        "language": language,
+    }
+
+
+async def generate_custom_content(
+    campaign_data: dict,
+    content_index: int,
+    language: str = "zh",
+) -> dict[str, Any]:
+    """Generate content for a custom content item via LLM."""
+    variables, item, format_str, template_name, task_key, _ = \
+        build_custom_content_variables(campaign_data, content_index)
+
+    logger.info(
+        "Generating custom content: format=%s → template=%s, task=%s",
+        format_str,
+        template_name,
+        task_key,
+    )
+
+    channel = item.get("channel", "")
+    channel_fit_warning = check_channel_fit(variables["persona"], channel, language)
+
+    result = await llm_router.route_and_generate(
+        task=task_key,
+        prompt_name=template_name,
+        variables=variables,
+        language=language,
+        max_tokens=4096,
+    )
+
     data_assets = campaign_data.get("data_assets", [])
     risk_scan = scan_content_risks(result["text"], data_assets, language)
 

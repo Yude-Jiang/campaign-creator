@@ -28,6 +28,16 @@
 {{ content_brief }}
 {% endif %}
 
+## Audience Intelligence
+
+- **目标受众**: {{ persona.name if persona else '工程师/决策者' }}
+{% if persona_pain_points %}- **关键痛点**: {{ persona_pain_points | join('; ') }}{% endif %}
+{% if persona_vp_headline %}- **核心价值主张**: {{ persona_vp_headline }}{% endif %}
+{% if persona_vp_argument %}- **价值论述**: {{ persona_vp_argument }}{% endif %}
+{% if persona_objections %}- **预判异议**（论证中预先回应）: {{ persona_objections | join('; ') }}{% endif %}
+{% if persona_search_queries %}- **目标搜索词**: {{ persona_search_queries | join(', ') }}{% endif %}
+{% if persona_info_channels %}- **信息渠道偏好**: {{ persona_info_channels | join(', ') }}{% endif %}
+
 ## 广告背景
 
 - **Campaign**: {{ brief.name }}
@@ -35,7 +45,6 @@
 - **产品/方案**: {{ brief.products | join(', ') }}
 - **关键词**: {{ keywords | join(', ') }}
 - **目标页面**: {{ brief.target_page_url }}
-- **目标受众**: {{ persona.name if persona else '工程师/决策者' }}
 
 {% if data_assets %}
 ## 已核实数据资产（量化声明的唯一许可来源）

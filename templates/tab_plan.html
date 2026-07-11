@@ -171,7 +171,20 @@
                   <span style="font-size:11px;color:var(--slate);">📡 {{ item.channel or '' }}</span>
                   <span style="font-size:10px;color:var(--slate);padding:1px 6px;border-radius:4px;background:{{ '#DCFCE7' if item.channel_type == 'organic' else '#FEF3C7' }};">{{ item.channel_type or '' }}</span>
                   <span style="font-size:11px;color:var(--ink);flex:1;min-width:150px;">{{ item.title_suggestion or '' }}</span>
-                  <span style="font-size:10px;color:var(--slate);">👤 {{ item.target_persona_id or '' }}</span>
+                  {% set pid = item.target_persona_id %}
+                  {% if pid is string and persona_map %}{% set pdata = persona_map.get(pid, {}) %}{% else %}{% set pdata = {} %}{% endif %}
+                  {% if pdata %}
+                  <span style="font-size:11px;font-weight:600;color:var(--navy);"
+                        title="{% if pdata.pain_points %}Pain: {{ pdata.pain_points[:2]|join('; ') }}{% if pdata.vp_headline %} | {% endif %}{% endif %}{% if pdata.vp_headline %}VP: {{ pdata.vp_headline }}{% endif %}">
+                    👤 {{ pdata.name }}
+                  </span>
+                  {% if pdata.vp_headline %}
+                  <span style="font-size:10px;color:var(--green);max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"
+                        title="{{ pdata.vp_headline }}">💡 {{ pdata.vp_headline[:40] }}</span>
+                  {% endif %}
+                  {% else %}
+                  <span style="font-size:10px;color:var(--slate);">👤 {{ pid or '' }}</span>
+                  {% endif %}
                 </div>
                 {% endfor %}
               </div>

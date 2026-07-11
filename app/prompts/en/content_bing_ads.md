@@ -28,6 +28,16 @@ The following patterns must NEVER appear in final output:
 {{ content_brief }}
 {% endif %}
 
+## Audience Intelligence
+
+- **Target Audience**: {{ persona.name if persona else 'Engineers / Decision Makers' }}
+{% if persona_pain_points %}- **Key Pain Points**: {{ persona_pain_points | join('; ') }}{% endif %}
+{% if persona_vp_headline %}- **Core Value Proposition**: {{ persona_vp_headline }}{% endif %}
+{% if persona_vp_argument %}- **VP Argument**: {{ persona_vp_argument }}{% endif %}
+{% if persona_objections %}- **Likely Objections** (preempt in argument): {{ persona_objections | join('; ') }}{% endif %}
+{% if persona_search_queries %}- **Target Search Queries**: {{ persona_search_queries | join(', ') }}{% endif %}
+{% if persona_info_channels %}- **Info Channel Preferences**: {{ persona_info_channels | join(', ') }}{% endif %}
+
 ## Ad Background
 
 - **Campaign**: {{ brief.name }}
@@ -35,7 +45,6 @@ The following patterns must NEVER appear in final output:
 - **Products/Solutions**: {{ brief.products | join(', ') }}
 - **Keywords**: {{ keywords | join(', ') }}
 - **Target Page**: {{ brief.target_page_url }}
-- **Target Audience**: {{ persona.name if persona else 'Engineers / Decision Makers' }}
 
 {% if data_assets %}
 ## Verified Data Assets (sole permitted source for quantitative claims)

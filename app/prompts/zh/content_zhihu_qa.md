@@ -26,12 +26,20 @@
 {{ content_brief }}
 {% endif %}
 
+## Audience Intelligence
+
+- **目标读者**: {{ persona.name }} ({{ persona.layer }})
+{% if persona_pain_points %}- **关键痛点**: {{ persona_pain_points | join('; ') }}{% endif %}
+{% if persona_vp_headline %}- **核心价值主张**: {{ persona_vp_headline }}{% endif %}
+{% if persona_vp_argument %}- **价值论述**: {{ persona_vp_argument }}{% endif %}
+{% if persona_objections %}- **预判异议**（论证中预先回应）: {{ persona_objections | join('; ') }}{% endif %}
+{% if persona_info_channels %}- **信息渠道偏好**: {{ persona_info_channels | join(', ') }}{% endif %}
+
 ## 问题背景
 
 - **原始问题**: {{ question_text }}
 - **Campaign**: {{ brief.name }}
 - **主题**: {{ brief.topic }}
-- **目标读者**: {{ persona.name }} ({{ persona.layer }})
 - **锚点**: {{ anchor_point }}
 {% if data_assets %}
 ## 已核实数据资产（量化声明的唯一许可来源）

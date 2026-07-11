@@ -26,11 +26,19 @@ The following patterns must NEVER appear in final output:
 {{ content_brief }}
 {% endif %}
 
+## Audience Intelligence
+
+- **Target Reader**: {{ persona.name }} ({{ persona.layer }})
+{% if persona_pain_points %}- **Key Pain Points**: {{ persona_pain_points | join('; ') }}{% endif %}
+{% if persona_vp_headline %}- **Core Value Proposition**: {{ persona_vp_headline }}{% endif %}
+{% if persona_vp_argument %}- **VP Argument**: {{ persona_vp_argument }}{% endif %}
+{% if persona_objections %}- **Likely Objections** (preempt in argument): {{ persona_objections | join('; ') }}{% endif %}
+{% if persona_info_channels %}- **Info Channel Preferences**: {{ persona_info_channels | join(', ') }}{% endif %}
+
 ## Article Background
 
 - **Campaign**: {{ brief.name }}
 - **Topic**: {{ brief.topic }}
-- **Target Reader**: {{ persona.name }} ({{ persona.layer }})
 - **Anchor**: {{ anchor_point }}
 - **Products/Solutions**: {{ brief.products | join(', ') }}
 - **Target Page**: {{ brief.target_page_url }}

@@ -81,8 +81,15 @@ def campaign_view(request: Request, campaign_id: str, lang: str = Query("zh")):
     else:
         template_name = "tab_brief.html"
 
-    # Compute extra context for Tab 4
+    # Compute extra context for Tab 3 (Plan) and Tab 4 (Content Studio)
     extra_context: dict = {}
+
+    if current_tab == 3:
+        # Persona lookup map for Plan display
+        extra_context["persona_map"] = {
+            p.get("id"): p for p in data.get("personas", []) if p and p.get("id")
+        }
+
     if current_tab == 4 and data.get("plan"):
         plan = data.get("plan", {})
         priorities = plan.get("priorities", [])
@@ -118,6 +125,11 @@ def campaign_view(request: Request, campaign_id: str, lang: str = Query("zh")):
 
         extra_context["sorted_priorities"] = sorted_priorities
         extra_context["persona_map"] = persona_map
+        # Custom content support
+        extra_context["custom_content"] = data.get("custom_content", [])
+        from app.services.content_service import get_available_formats
+
+        extra_context["format_options"] = get_available_formats(lang)
 
     return templates.TemplateResponse(
         request,

@@ -177,6 +177,31 @@ MOCK_SORTED_PRIORITIES = [
 
 MOCK_PERSONA_MAP = {"p1": MOCK_CAMPAIGN["personas"][0]}
 
+MOCK_CUSTOM_CONTENT = [
+    {
+        "_custom": True,
+        "format": "email",
+        "channel": "邮件",
+        "channel_type": "organic",
+        "target_persona_id": "p1",
+        "title_suggestion": "Test Custom Email",
+        "topic": "Custom email for testing",
+        "anchor_point": "Custom email for testing",
+        "content_brief": "Custom email for testing",
+        "question_id": "q1",
+        "created_at": "2026-01-01T00:00:00",
+        "generated_content": "",
+        "generated_model": "",
+        "generated_at": "",
+    },
+]
+
+MOCK_FORMAT_OPTIONS = [
+    {"key": "zhihu_long", "label_zh": "知乎长文", "label_en": "Zhihu Long-Form", "channel": "知乎", "channel_type": "organic"},
+    {"key": "email", "label_zh": "邮件培育序列", "label_en": "Email Nurture", "channel": "邮件", "channel_type": "organic"},
+    {"key": "baidu_sem", "label_zh": "百度竞价广告", "label_en": "Baidu SEM", "channel": "百度竞价", "channel_type": "paid"},
+]
+
 
 def _mock_request():
     """Create a minimal mock Starlette Request."""
@@ -278,13 +303,15 @@ class TestTemplateContextSmoke:
         starlette_templates.get_template("tab_plan.html").render(ctx)
 
     def test_content_studio_template_renders(self):
-        """Tab 4: Content Studio — needs campaign, sorted_priorities, persona_map."""
+        """Tab 4: Content Studio — needs campaign, sorted_priorities, persona_map, custom_content, format_options."""
         from app.api.pages import templates as starlette_templates
 
         ctx = _build_page_context(
             "tab_content_studio.html",
             sorted_priorities=MOCK_SORTED_PRIORITIES,
             persona_map=MOCK_PERSONA_MAP,
+            custom_content=MOCK_CUSTOM_CONTENT,
+            format_options=MOCK_FORMAT_OPTIONS,
         )
         starlette_templates.get_template("tab_content_studio.html").render(ctx)
 
@@ -298,6 +325,8 @@ class TestTemplateContextSmoke:
                 extra = {
                     "sorted_priorities": MOCK_SORTED_PRIORITIES,
                     "persona_map": MOCK_PERSONA_MAP,
+                    "custom_content": MOCK_CUSTOM_CONTENT,
+                    "format_options": MOCK_FORMAT_OPTIONS,
                 }
             ctx = _build_page_context(filename, **extra)
             try:
@@ -534,3 +563,116 @@ class TestContentStudioIntegration:
         tab4 = ctx["tabs"][4]
         assert tab4["num"] == "4"
         assert tab4["disabled"] is False, "Content Studio tab should be enabled when plan exists"
+
+
+# ═══════════════════════════════════════════════════════════
+# Guard 5: Custom Content (Phase 4)
+# ═══════════════════════════════════════════════════════════
+
+class TestCustomContentAPI:
+    """Custom content API endpoints must be wired and reachable."""
+
+    def test_custom_content_endpoints_exist(self):
+        """All 5 custom content endpoints must be defined in campaign.py."""
+        campaign_src = (APP_DIR / "api" / "campaign.py").read_text(encoding="utf-8")
+        endpoints = [
+            "/content/formats",
+            "/content/custom",
+            "/content/custom/compose-prompt",
+            "/content/custom/generate",
+        ]
+        for ep in endpoints:
+            assert ep in campaign_src, f"Custom content endpoint '{ep}' not found in campaign.py"
+
+    def test_custom_content_delete_endpoint_exists(self):
+        """DELETE endpoint for custom content must exist."""
+        campaign_src = (APP_DIR / "api" / "campaign.py").read_text(encoding="utf-8")
+        assert 'delete_custom_content' in campaign_src, (
+            "DELETE endpoint for custom content not found"
+        )
+
+    def test_get_available_formats_filters_by_language(self):
+        """get_available_formats() must return only zh formats for zh, en for en."""
+        from app.services.content_service import get_available_formats
+
+        zh_formats = get_available_formats("zh")
+        en_formats = get_available_formats("en")
+
+        # zh must not include linkedin/bing
+        zh_keys = {f["key"] for f in zh_formats}
+        assert "linkedin" not in zh_keys, "zh formats should not include LinkedIn"
+        assert "bing" not in zh_keys, "zh formats should not include Bing"
+        assert "zhihu_long" in zh_keys, "zh formats should include zhihu_long"
+
+        # en must not include zhihu/csdn/bilibili/baidu/wechat
+        en_keys = {f["key"] for f in en_formats}
+        assert "zhihu_long" not in en_keys, "en formats should not include zhihu"
+        assert "csdn" not in en_keys, "en formats should not include CSDN"
+        assert "linkedin" in en_keys, "en formats should include LinkedIn"
+        assert "email" in en_keys, "en formats should include email (shared)"
+
+    def test_build_custom_content_variables_injects_persona_fields(self):
+        """build_custom_content_variables() must inject persona_pain_points, vp_headline, etc."""
+        from app.services.content_service import build_custom_content_variables
+
+        campaign_data = dict(MOCK_CAMPAIGN)
+        campaign_data["custom_content"] = MOCK_CUSTOM_CONTENT
+
+        variables, item, format_str, template_name, task_key, needs_kw = \
+            build_custom_content_variables(campaign_data, 0)
+
+        assert variables["persona_pain_points"] == ["功耗", "实时性"]
+        assert variables["persona_vp_headline"] == "最高安全等级的 MCU"
+        assert variables["persona_vp_argument"] == "硬件隔离架构"
+        assert variables["persona_objections"] == ["价格高"]
+        assert variables["persona_search_queries"] == ["MCU 选型", "汽车芯片安全"]
+        assert variables["persona_info_channels"] == ["知乎", "CSDN"]
+
+    def test_build_content_variables_injects_persona_fields(self):
+        """_build_content_variables() must inject persona-derived fields."""
+        from app.services.content_service import _build_content_variables
+
+        variables, item, format_str, template_name, task_key, needs_kw = \
+            _build_content_variables(MOCK_CAMPAIGN, 0, 0)
+
+        assert "persona_pain_points" in variables
+        assert "persona_vp_headline" in variables
+        assert "persona_objections" in variables
+        assert variables["persona_vp_headline"] == "最高安全等级的 MCU"
+
+    def test_compose_custom_prompt_renders(self):
+        """compose_custom_prompt() must render a valid prompt string."""
+        from app.services.content_service import compose_custom_prompt
+
+        campaign_data = dict(MOCK_CAMPAIGN)
+        campaign_data["custom_content"] = MOCK_CUSTOM_CONTENT
+
+        result = compose_custom_prompt(campaign_data, 0, language="zh")
+        assert "prompt" in result
+        assert result["template"] == "content_email.md"
+        assert "MCU 系统架构师" in result["prompt"]
+        # Audience Intelligence block should be present when persona has fields
+        assert "Audience Intelligence" in result["prompt"]
+
+    def test_compose_prompt_includes_audience_intelligence(self):
+        """Standard compose_prompt() must include Audience Intelligence block."""
+        from app.services.content_service import compose_prompt
+
+        result = compose_prompt(MOCK_CAMPAIGN, 0, 0, language="zh")
+        assert "Audience Intelligence" in result["prompt"]
+        assert "最高安全等级的 MCU" in result["prompt"]
+        assert "功耗" in result["prompt"]
+
+    def test_content_studio_renders_without_custom_content(self):
+        """Content Studio must render even with empty custom_content and format_options."""
+        from app.api.pages import templates as starlette_templates
+
+        ctx = _build_page_context(
+            "tab_content_studio.html",
+            sorted_priorities=MOCK_SORTED_PRIORITIES,
+            persona_map=MOCK_PERSONA_MAP,
+            custom_content=[],
+            format_options=[],
+        )
+        # Should render without error (empty custom content section)
+        starlette_templates.get_template("tab_content_studio.html").render(ctx)
