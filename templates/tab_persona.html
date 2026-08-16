@@ -107,15 +107,18 @@
   <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
     <h3 style="font-size:16px;color:var(--navy);margin:0;">
       🎯 {% if language == 'zh' %}目标 Persona（{{ campaign.personas|length }} 个）{% else %}Target Personas ({{ campaign.personas|length }}){% endif %}
+      <span style="font-size:11px;font-weight:400;color:var(--slate);margin-left:8px;">
+        {% if language == 'zh' %}导出为单个文件，含全部 Persona 与基准问题{% else %}Exports as a single file with every persona and question{% endif %}
+      </span>
     </h3>
     <div style="display:flex;gap:8px;align-items:center;">
       <button class="btn btn-secondary" style="font-size:12px;padding:4px 12px;" onclick="exportPersonas('md')"
-              title="{% if language == 'zh' %}下载 Markdown（含来源与可信度说明）{% else %}Download Markdown (includes provenance){% endif %}">
-        📄 {% if language == 'zh' %}导出 MD{% else %}Export MD{% endif %}
+              title="{% if language == 'zh' %}单个 Markdown 文件，包含全部 {{ campaign.personas|length }} 个 Persona、价值主张、{{ campaign.questions|length }} 个基准问题，以及来源与可信度说明{% else %}One Markdown file containing all {{ campaign.personas|length }} personas, their value propositions, {{ campaign.questions|length }} benchmark questions, and the provenance notes{% endif %}">
+        📄 {% if language == 'zh' %}导出全部 · MD{% else %}Export All · MD{% endif %}
       </button>
       <button class="btn btn-secondary" style="font-size:12px;padding:4px 12px;" onclick="exportPersonas('html')"
-              title="{% if language == 'zh' %}下载 HTML 报告{% else %}Download HTML report{% endif %}">
-        🌐 {% if language == 'zh' %}导出 HTML{% else %}Export HTML{% endif %}
+              title="{% if language == 'zh' %}单个 HTML 报告，包含全部 {{ campaign.personas|length }} 个 Persona、价值主张、{{ campaign.questions|length }} 个基准问题，以及来源与可信度说明{% else %}One HTML report containing all {{ campaign.personas|length }} personas, their value propositions, {{ campaign.questions|length }} benchmark questions, and the provenance notes{% endif %}">
+        🌐 {% if language == 'zh' %}导出全部 · HTML{% else %}Export All · HTML{% endif %}
       </button>
       <button class="btn btn-secondary" style="font-size:12px;padding:4px 12px;" onclick="addPersona()">
         + {% if language == 'zh' %}添加 Persona{% else %}Add Persona{% endif %}
@@ -421,10 +424,10 @@
 </button>
 {% if campaign.personas %}
 <button class="btn btn-secondary" onclick="exportPersonas('md')">
-  📄 {% if language == 'zh' %}导出 MD{% else %}Export MD{% endif %}
+  📄 {% if language == 'zh' %}导出全部 · MD{% else %}Export All · MD{% endif %}
 </button>
 <button class="btn btn-secondary" onclick="exportPersonas('html')">
-  🌐 {% if language == 'zh' %}导出 HTML{% else %}Export HTML{% endif %}
+  🌐 {% if language == 'zh' %}导出全部 · HTML{% else %}Export All · HTML{% endif %}
 </button>
 <button class="btn btn-primary" onclick="navigateToTab(2)">
   {% if language == 'zh' %}继续 → GEO Diagnosis{% else %}Next → GEO Diagnosis{% endif %}

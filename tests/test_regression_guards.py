@@ -1545,3 +1545,35 @@ class TestPersonaExportEndpoints:
         assert "exportPersonas('md')" in tmpl
         assert "exportPersonas('html')" in tmpl
         assert "persona/export/" in tmpl
+
+    def test_one_file_contains_every_persona_and_question(self):
+        """The export is whole-campaign, not per-persona — a reader asked, so
+        pin it down."""
+        from app.services.export_service import (
+            export_personas_to_html,
+            export_personas_to_markdown,
+        )
+
+        campaign = dict(PERSONA_EXPORT_CAMPAIGN)
+        campaign["personas"] = [
+            {"id": f"p{i}", "name": f"角色{i}", "layer": "practitioner",
+             "basis": "generated", "pain_points": [f"痛点{i}"]}
+            for i in range(5)
+        ]
+        campaign["questions"] = [
+            {"id": f"q{i}", "text": f"问题{i}", "diagnostic_value": "high"}
+            for i in range(4)
+        ]
+
+        for doc in (export_personas_to_markdown(campaign),
+                    export_personas_to_html(campaign)):
+            for i in range(5):
+                assert f"角色{i}" in doc, f"persona {i} missing from the export"
+                assert f"痛点{i}" in doc
+            for i in range(4):
+                assert f"问题{i}" in doc, f"question {i} missing from the export"
+
+    def test_ui_states_the_export_is_whole_campaign(self):
+        tmpl = (TEMPLATES_DIR / "tab_persona.html").read_text(encoding="utf-8")
+        assert "导出全部" in tmpl, "button label should say it exports everything"
+        assert "Export All" in tmpl
