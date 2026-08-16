@@ -6,6 +6,7 @@ routes generation through the LLM router.
 
 import logging
 import re
+import uuid
 from typing import Any
 
 from app.services.llm_router import llm_router
@@ -368,22 +369,62 @@ async def generate_content(
 # ── Custom Content (user-added, not plan-derived) ──
 
 
+def new_custom_id() -> str:
+    """Mint a stable identifier for a custom content item."""
+    return f"cc_{uuid.uuid4().hex[:12]}"
+
+
+def ensure_custom_ids(custom_items: list[dict]) -> bool:
+    """Backfill ids on legacy custom items. Returns True if anything changed.
+
+    Call this inside a write path (under the campaign lock) so older campaigns
+    pick up stable ids the first time they are touched.
+    """
+    changed = False
+    for item in custom_items:
+        if isinstance(item, dict) and not item.get("id"):
+            item["id"] = new_custom_id()
+            changed = True
+    return changed
+
+
+def resolve_custom_index(custom_items: list[dict], content_key: str | int) -> int:
+    """Resolve a custom content item to its current list index.
+
+    Items are addressed by their stable `id`. A purely numeric key is accepted
+    as a positional fallback for campaigns created before ids existed —
+    positional addressing is what let a delete shift every later item out from
+    under the buttons already rendered in the browser.
+    """
+    key = str(content_key)
+
+    for i, item in enumerate(custom_items):
+        if isinstance(item, dict) and item.get("id") and item["id"] == key:
+            return i
+
+    if key.lstrip("-").isdigit():
+        idx = int(key)
+        if 0 <= idx < len(custom_items):
+            return idx
+        raise ValueError(
+            f"content_index {idx} out of range (0-{len(custom_items) - 1})"
+        )
+
+    raise ValueError(f"Custom content item '{key}' not found")
+
+
 def build_custom_content_variables(
     campaign_data: dict,
-    content_index: int,
+    content_key: str | int,
 ) -> tuple[dict[str, Any], dict, str, str, str, bool]:
     """Build Jinja2 variables for a custom content item.
 
-    Mirrors _build_content_variables but reads from campaign_data["custom_content"][content_index]
-    instead of plan.priorities[].content_plan[].
+    Mirrors _build_content_variables but reads from campaign_data["custom_content"]
+    instead of plan.priorities[].content_plan[]. `content_key` is the item's
+    stable id (or a positional index for legacy campaigns).
     """
     custom_content = campaign_data.get("custom_content", [])
-    if content_index < 0 or content_index >= len(custom_content):
-        raise ValueError(
-            f"content_index {content_index} out of range (0-{len(custom_content) - 1})"
-        )
-
-    item = custom_content[content_index]
+    item = custom_content[resolve_custom_index(custom_content, content_key)]
     format_str = item.get("format", "")
     if not format_str:
         raise ValueError("Custom content item has no format — cannot determine template")
@@ -439,12 +480,12 @@ def build_custom_content_variables(
 
 def compose_custom_prompt(
     campaign_data: dict,
-    content_index: int,
+    content_key: str | int,
     language: str = "zh",
 ) -> dict[str, Any]:
     """Compose the full prompt for a custom content item without calling the LLM."""
     variables, _item, format_str, template_name, task_key, _ = \
-        build_custom_content_variables(campaign_data, content_index)
+        build_custom_content_variables(campaign_data, content_key)
 
     from app.services.llm_router import _jinja_env
 
@@ -469,12 +510,12 @@ def compose_custom_prompt(
 
 async def generate_custom_content(
     campaign_data: dict,
-    content_index: int,
+    content_key: str | int,
     language: str = "zh",
 ) -> dict[str, Any]:
     """Generate content for a custom content item via LLM."""
     variables, item, format_str, template_name, task_key, _ = \
-        build_custom_content_variables(campaign_data, content_index)
+        build_custom_content_variables(campaign_data, content_key)
 
     logger.info(
         "Generating custom content: format=%s → template=%s, task=%s",

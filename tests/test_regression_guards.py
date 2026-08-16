@@ -874,3 +874,176 @@ class TestCampaignLanguageSwitch:
         js = (STATIC_DIR / "js" / "app.js").read_text(encoding="utf-8")
         assert "/language" in js, "setLanguage never calls the language endpoint"
         assert "_campaignId" in js
+
+
+class TestCustomContentStableAddressing:
+    """Custom content was addressed by list position, so deleting an earlier
+    item silently retargeted every button already rendered in the browser."""
+
+    def _client(self, tmp_path, monkeypatch):
+        import app.utils.file_handler as fh
+        from app.main import app as fastapi_app
+
+        monkeypatch.setattr(fh, "CAMPAIGNS_DIR", tmp_path / "campaigns")
+        return TestClient(fastapi_app)
+
+    def _make_campaign(self, client) -> str:
+        created = client.post("/api/campaigns", json={
+            "brief": {"name": "custom-addr", "topic": "t", "language": "zh"},
+        })
+        assert created.status_code == 200, created.text
+        return created.json()["campaign_id"]
+
+    def _add(self, client, cid, topic) -> str:
+        resp = client.post(f"/api/campaigns/{cid}/content/custom", json={
+            "format": "zhihu_long",
+            "target_persona_id": "p1",
+            "topic": topic,
+        })
+        assert resp.status_code == 200, resp.text
+        content_id = resp.json()["content_id"]
+        assert content_id, "create must return a stable content_id"
+        return content_id
+
+    def test_delete_does_not_shift_other_items(self, tmp_path, monkeypatch):
+        client = self._client(tmp_path, monkeypatch)
+        cid = self._make_campaign(client)
+
+        first = self._add(client, cid, "first")
+        second = self._add(client, cid, "second")
+        third = self._add(client, cid, "third")
+        assert len({first, second, third}) == 3
+
+        # Delete the first item — under positional addressing, `third` would
+        # slide from index 2 to index 1.
+        resp = client.delete(f"/api/campaigns/{cid}/content/custom/{first}")
+        assert resp.status_code == 200, resp.text
+
+        # The id still resolves to the same logical item.
+        prompt = client.post(f"/api/campaigns/{cid}/content/custom/compose-prompt",
+                             json={"content_id": third})
+        assert prompt.status_code == 200, prompt.text
+        assert "third" in prompt.json()["prompt"]
+
+        stored = client.get(f"/api/campaigns/{cid}").json()["custom_content"]
+        assert [i["topic"] for i in stored] == ["second", "third"]
+        assert [i["id"] for i in stored] == [second, third]
+
+    def test_deleting_unknown_id_is_404_not_silent(self, tmp_path, monkeypatch):
+        client = self._client(tmp_path, monkeypatch)
+        cid = self._make_campaign(client)
+        self._add(client, cid, "only")
+
+        resp = client.delete(f"/api/campaigns/{cid}/content/custom/cc_doesnotexist")
+        assert resp.status_code == 404
+
+    def test_legacy_positional_key_still_resolves(self, tmp_path, monkeypatch):
+        """Campaigns saved before ids existed must keep working."""
+        from app.services.content_service import resolve_custom_index
+
+        legacy = [{"topic": "a"}, {"topic": "b"}]
+        assert resolve_custom_index(legacy, 0) == 0
+        assert resolve_custom_index(legacy, "1") == 1
+        with pytest.raises(ValueError):
+            resolve_custom_index(legacy, 5)
+
+    def test_id_wins_over_a_numeric_lookalike(self):
+        from app.services.content_service import resolve_custom_index
+
+        items = [{"id": "7", "topic": "a"}, {"id": "cc_x", "topic": "b"}]
+        # "7" is a real id at position 0 — it must not be read as index 7.
+        assert resolve_custom_index(items, "7") == 0
+
+    def test_ensure_custom_ids_backfills_only_missing(self):
+        from app.services.content_service import ensure_custom_ids
+
+        items = [{"id": "cc_keep"}, {}, {"id": ""}]
+        assert ensure_custom_ids(items) is True
+        assert items[0]["id"] == "cc_keep"
+        assert items[1]["id"].startswith("cc_")
+        assert items[2]["id"].startswith("cc_")
+        assert len({i["id"] for i in items}) == 3
+        # Idempotent
+        assert ensure_custom_ids(items) is False
+
+
+class TestProviderConfigConsistency:
+    """Config drift between code, .env.example, and README shipped a Kimi base
+    URL that 404s, and left a dead Claude provider wired into the registry."""
+
+    def test_every_registered_provider_is_routable(self):
+        """A provider in the registry that no task routes to is dead code."""
+        from app.services.llm_router import PROVIDERS, TASK_ROUTING
+
+        routed = set()
+        for routing in TASK_ROUTING.values():
+            for slot in ("primary", "secondary", "fallback"):
+                if routing.get(slot):
+                    routed.add(routing[slot])
+
+        unroutable = set(PROVIDERS) - routed
+        assert not unroutable, (
+            f"Providers registered but never routed to: {sorted(unroutable)}. "
+            f"Either route them or remove them."
+        )
+
+    def test_every_routed_provider_is_registered(self):
+        from app.services.llm_router import PROVIDERS, TASK_ROUTING
+
+        for task, routing in TASK_ROUTING.items():
+            for slot in ("primary", "secondary", "fallback"):
+                name = routing.get(slot)
+                if name:
+                    assert name in PROVIDERS, (
+                        f"Task '{task}' routes {slot} to unknown provider '{name}'"
+                    )
+
+    def test_kimi_base_url_keeps_v1_suffix(self):
+        """The OpenAI-compatible client appends /chat/completions, so dropping
+        /v1 silently 404s and the failure is swallowed by the fallback chain."""
+        from app.core.config import Settings
+
+        assert Settings().kimi_base_url.rstrip("/").endswith("/v1")
+
+        env_example = (ROOT / ".env.example").read_text(encoding="utf-8")
+        kimi_lines = [ln for ln in env_example.splitlines()
+                      if ln.startswith("KIMI_BASE_URL=")]
+        assert kimi_lines, "KIMI_BASE_URL missing from .env.example"
+        assert kimi_lines[0].rstrip("/").endswith("/v1"), (
+            f".env.example ships a Kimi base URL without /v1: {kimi_lines[0]}"
+        )
+
+    def test_env_example_documents_every_settings_key(self):
+        """Provider keys in Settings must be discoverable in .env.example."""
+        from app.core.config import Settings
+
+        env_example = (ROOT / ".env.example").read_text(encoding="utf-8").upper()
+        for field in Settings.model_fields:
+            if field.endswith("_api_key") or field.endswith("_base_url"):
+                assert field.upper() in env_example, (
+                    f"Settings.{field} is not mentioned in .env.example"
+                )
+
+    def test_no_dead_claude_references(self):
+        """Claude was removed from routing; the provider, dependency, and docs
+        must not linger."""
+        assert not (APP_DIR / "services" / "providers" / "claude.py").exists()
+
+        pyproject = (ROOT / "pyproject.toml").read_text(encoding="utf-8")
+        assert "anthropic" not in pyproject
+
+        readme = (ROOT / "README.md").read_text(encoding="utf-8")
+        assert "ANTHROPIC_API_KEY" not in readme
+
+        from app.core.config import Settings
+        assert "anthropic_api_key" not in Settings.model_fields
+
+
+class TestDockerfilePortHandling:
+    """EXPOSE $PORT was evaluated at build time when PORT was undefined, and the
+    CMD had no default, so `docker run` without -e PORT failed to start."""
+
+    def test_port_has_a_default(self):
+        dockerfile = (ROOT / "Dockerfile").read_text(encoding="utf-8")
+        assert "EXPOSE $PORT" not in dockerfile, "EXPOSE needs a literal port"
+        assert "${PORT:-" in dockerfile, "CMD must default PORT for local runs"

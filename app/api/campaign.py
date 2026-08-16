@@ -609,8 +609,23 @@ class CustomContentCreateRequest(BaseModel):
     question_id: str = Field(default="", description="Optional question ID to associate")
 
 
-class CustomContentIndexRequest(BaseModel):
-    content_index: int = Field(..., ge=0)
+class CustomContentRefRequest(BaseModel):
+    """Addresses one custom content item.
+
+    `content_id` is the stable identifier and is preferred. `content_index` is
+    kept for clients rendered before ids existed; positional addressing breaks
+    as soon as an earlier item is deleted.
+    """
+    content_id: str | None = None
+    content_index: int | None = Field(default=None, ge=0)
+
+    @property
+    def key(self) -> str | int:
+        if self.content_id:
+            return self.content_id
+        if self.content_index is not None:
+            return self.content_index
+        raise ValueError("Either content_id or content_index is required")
 
 
 @router.get("/campaigns/{campaign_id}/content/formats")
@@ -628,7 +643,7 @@ def get_available_formats_endpoint(campaign_id: str):
 @router.post("/campaigns/{campaign_id}/content/custom")
 def create_custom_content(campaign_id: str, body: CustomContentCreateRequest):
     """Create a new custom content item (survives plan regeneration)."""
-    from app.services.content_service import FORMAT_OPTIONS
+    from app.services.content_service import FORMAT_OPTIONS, ensure_custom_ids, new_custom_id
 
     with campaign_lock(campaign_id):
         data = load_campaign_json(campaign_id)
@@ -642,6 +657,7 @@ def create_custom_content(campaign_id: str, body: CustomContentCreateRequest):
 
         item = {
             "_custom": True,
+            "id": new_custom_id(),
             "format": body.format,
             "channel": channel_name,
             "channel_type": channel_type,
@@ -658,16 +674,22 @@ def create_custom_content(campaign_id: str, body: CustomContentCreateRequest):
         }
 
         custom_items = data.get("custom_content", [])
+        ensure_custom_ids(custom_items)
         custom_items.append(item)
         data["custom_content"] = custom_items
         data["updated_at"] = datetime.now().isoformat()
         save_campaign_json(campaign_id, data)
 
-    return {"ok": True, "campaign_id": campaign_id, "content_index": len(custom_items) - 1}
+    return {
+        "ok": True,
+        "campaign_id": campaign_id,
+        "content_id": item["id"],
+        "content_index": len(custom_items) - 1,
+    }
 
 
 @router.post("/campaigns/{campaign_id}/content/custom/compose-prompt")
-def compose_custom_prompt_endpoint(campaign_id: str, body: CustomContentIndexRequest):
+def compose_custom_prompt_endpoint(campaign_id: str, body: CustomContentRefRequest):
     """Compose the full LLM prompt for a custom content item."""
     data = load_campaign_json(campaign_id)
     if not data:
@@ -677,48 +699,55 @@ def compose_custom_prompt_endpoint(campaign_id: str, body: CustomContentIndexReq
 
     language = data.get("language", "zh")
     try:
-        result = compose_custom_prompt(data, body.content_index, language=language)
+        result = compose_custom_prompt(data, body.key, language=language)
     except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        raise HTTPException(status_code=400, detail=str(e)) from e
 
     return {"ok": True, **result}
 
 
 @router.post("/campaigns/{campaign_id}/content/custom/generate")
-async def generate_custom_content_endpoint(campaign_id: str, body: CustomContentIndexRequest):
+async def generate_custom_content_endpoint(campaign_id: str, body: CustomContentRefRequest):
     """Generate content via LLM for a custom content item and persist result."""
-    data = load_campaign_json(campaign_id)
-    if not data:
-        raise HTTPException(status_code=404, detail="Campaign 不存在 | Campaign not found")
+    with campaign_lock(campaign_id):
+        data = load_campaign_json(campaign_id)
+        if not data:
+            raise HTTPException(status_code=404, detail="Campaign 不存在 | Campaign not found")
+        language = data.get("language", "zh")
 
-    from app.services.content_service import generate_custom_content
+    from app.services.content_service import generate_custom_content, resolve_custom_index
 
-    language = data.get("language", "zh")
+    # LLM call (no lock held — can take 30-120s)
     try:
-        result = await generate_custom_content(data, body.content_index, language=language)
+        result = await generate_custom_content(data, body.key, language=language)
     except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        raise HTTPException(status_code=400, detail=str(e)) from e
     except RuntimeError as e:
-        raise HTTPException(status_code=502, detail=str(e))
+        raise HTTPException(status_code=502, detail=str(e)) from e
 
-    # Persist generated content
+    # Persist generated content — re-resolve under the lock, since the list may
+    # have shifted while the LLM call was in flight.
     with campaign_lock(campaign_id):
         data = load_campaign_json(campaign_id)
         if not data:
             raise HTTPException(status_code=404, detail="Campaign 不存在 | Campaign not found")
         custom_items = data.get("custom_content", [])
-        if body.content_index < len(custom_items):
-            item = custom_items[body.content_index]
-            item["generated_content"] = result["text"]
-            item["generated_model"] = result["model"]
-            item["generated_at"] = datetime.now().isoformat()
+        try:
+            idx = resolve_custom_index(custom_items, body.key)
+        except ValueError as e:
+            raise HTTPException(status_code=409, detail=str(e)) from e
+        item = custom_items[idx]
+        item["generated_content"] = result["text"]
+        item["generated_model"] = result["model"]
+        item["generated_at"] = datetime.now().isoformat()
         data["updated_at"] = datetime.now().isoformat()
         save_campaign_json(campaign_id, data)
 
     return {
         "ok": True,
         "campaign_id": campaign_id,
-        "content_index": body.content_index,
+        "content_id": item.get("id", ""),
+        "content_index": idx,
         "content": result["text"],
         "model": result["model"],
         "format": result.get("format", ""),
@@ -727,21 +756,26 @@ async def generate_custom_content_endpoint(campaign_id: str, body: CustomContent
     }
 
 
-@router.delete("/campaigns/{campaign_id}/content/custom/{content_index}")
-def delete_custom_content(campaign_id: str, content_index: int):
-    """Delete a custom content item by index."""
+@router.delete("/campaigns/{campaign_id}/content/custom/{content_key}")
+def delete_custom_content(campaign_id: str, content_key: str):
+    """Delete a custom content item by stable id (or legacy positional index)."""
+    from app.services.content_service import ensure_custom_ids, resolve_custom_index
+
     with campaign_lock(campaign_id):
         data = load_campaign_json(campaign_id)
         if not data:
             raise HTTPException(status_code=404, detail="Campaign 不存在 | Campaign not found")
         custom_items = data.get("custom_content", [])
-        if content_index < 0 or content_index >= len(custom_items):
-            raise HTTPException(status_code=400, detail="Content index out of range")
-        custom_items.pop(content_index)
+        ensure_custom_ids(custom_items)
+        try:
+            idx = resolve_custom_index(custom_items, content_key)
+        except ValueError as e:
+            raise HTTPException(status_code=404, detail=str(e)) from e
+        removed = custom_items.pop(idx)
         data["custom_content"] = custom_items
         data["updated_at"] = datetime.now().isoformat()
         save_campaign_json(campaign_id, data)
-    return {"ok": True}
+    return {"ok": True, "deleted": removed.get("id", idx)}
 
 
 @router.get("/campaigns/{campaign_id}/export/all")

@@ -7,7 +7,6 @@ from typing import Any
 from jinja2 import Environment, FileSystemLoader
 
 from app.services.providers import (
-    ClaudeProvider,
     DeepSeekProvider,
     GeminiProvider,
     KimiProvider,
@@ -115,7 +114,6 @@ TASK_ROUTING: dict[str, dict[str, Any]] = {
 # ── Provider Registry ──
 
 PROVIDERS: dict[str, Any] = {
-    "claude": ClaudeProvider(),
     "gemini": GeminiProvider(),
     "deepseek": DeepSeekProvider(),
     "kimi": KimiProvider(),

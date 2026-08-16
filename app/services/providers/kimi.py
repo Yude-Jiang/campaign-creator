@@ -22,7 +22,7 @@ class KimiProvider(BaseProvider):
         max_tokens: int = 4096,
         temperature: float = 0.7,
         **kwargs: Any,
-    ) -> str:
+    ) -> dict[str, Any]:
         try:
             from openai import AsyncOpenAI
 

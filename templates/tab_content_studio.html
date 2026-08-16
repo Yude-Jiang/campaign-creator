@@ -251,6 +251,8 @@
       {% if custom_content %}
       {% for ci in range(custom_content|length) %}
       {% set item = custom_content[ci] %}
+      {# Address by stable id so deleting an earlier item cannot retarget this one #}
+      {% set ckey = item.get('id') or ci %}
       <div class="content-item-custom" style="margin-top:12px;padding:16px;background:var(--bg);border-radius:8px;border:1px solid var(--blue);border-left:4px solid var(--gold);">
         <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;flex-wrap:wrap;">
           <span style="font-size:10px;font-weight:600;background:var(--gold);color:var(--navy);padding:2px 8px;border-radius:4px;">{% if language == 'zh' %}自定义{% else %}CUSTOM{% endif %}</span>
@@ -261,24 +263,24 @@
           {% set cpdata = persona_map.get(cpid, {}) if cpid is string else {} %}
           <span style="font-size:11px;color:var(--slate);">👤 {{ cpdata.name if cpdata else cpid }}</span>
           <button class="btn btn-secondary" style="font-size:10px;padding:2px 8px;margin-left:auto;color:var(--red);"
-                  onclick="deleteCustomContent({{ ci }})">✕</button>
+                  onclick="deleteCustomContent({{ ckey | tojson }})">✕</button>
         </div>
         <p style="font-size:14px;font-weight:600;color:var(--navy);margin-bottom:8px;">{{ item.title_suggestion or item.topic }}</p>
 
         <!-- Action buttons -->
         <div style="display:flex;gap:8px;margin-bottom:12px;">
-          <textarea id="custom-brief-{{ ci }}" style="display:none;">{{ item.get('content_brief', item.get('topic', '')) }}</textarea>
+          <textarea id="custom-brief-{{ ckey }}" style="display:none;">{{ item.get('content_brief', item.get('topic', '')) }}</textarea>
           <button class="btn btn-secondary" style="font-size:12px;padding:6px 14px;"
-                  onclick="copyCustomBrief({{ ci }}, event)">
+                  onclick="copyCustomBrief({{ ckey | tojson }}, event)">
             📋 {% if language == 'zh' %}复制指引{% else %}Copy Brief{% endif %}
           </button>
           <button class="btn btn-secondary" style="font-size:12px;padding:6px 14px;"
-                  onclick="copyCustomFullPrompt({{ ci }}, event)">
+                  onclick="copyCustomFullPrompt({{ ckey | tojson }}, event)">
             📄 {% if language == 'zh' %}复制完整 Prompt{% else %}Copy Full Prompt{% endif %}
           </button>
           <button class="btn btn-primary" style="font-size:12px;padding:6px 14px;"
-                  id="custom-gen-btn-{{ ci }}"
-                  onclick="generateCustomContent({{ ci }})">
+                  id="custom-gen-btn-{{ ckey }}"
+                  onclick="generateCustomContent({{ ckey | tojson }})">
             ⚡ {% if language == 'zh' %}生成内容{% else %}Generate Content{% endif %}
           </button>
         </div>
@@ -292,7 +294,7 @@
           <div style="white-space:pre-wrap;font-size:14px;max-height:600px;overflow-y:auto;">{{ item.generated_content }}</div>
         </div>
         {% endif %}
-        <div id="custom-result-{{ ci }}" style="margin-top:8px;"></div>
+        <div id="custom-result-{{ ckey }}" style="margin-top:8px;"></div>
       </div>
       {% endfor %}
       {% endif %}
@@ -464,11 +466,11 @@ async function saveCustomContent() {
   }
 }
 
-async function deleteCustomContent(index) {
+async function deleteCustomContent(key) {
   if (!confirm('{% if language == "zh" %}确认删除此自定义内容？{% else %}Delete this custom content item?{% endif %}')) return;
 
   try {
-    await apiFetch('/api/campaigns/{{ campaign_id }}/content/custom/' + index, {
+    await apiFetch('/api/campaigns/{{ campaign_id }}/content/custom/' + encodeURIComponent(key), {
       method: 'DELETE',
     });
     location.reload();
@@ -477,8 +479,8 @@ async function deleteCustomContent(index) {
   }
 }
 
-async function copyCustomBrief(ci, e) {
-  const textarea = document.getElementById('custom-brief-' + ci);
+async function copyCustomBrief(key, e) {
+  const textarea = document.getElementById('custom-brief-' + key);
   if (!textarea) return;
   try {
     await navigator.clipboard.writeText(textarea.value);
@@ -498,7 +500,7 @@ async function copyCustomBrief(ci, e) {
   }
 }
 
-async function copyCustomFullPrompt(ci, e) {
+async function copyCustomFullPrompt(key, e) {
   const btn = e.target;
   const original = btn.textContent;
   btn.textContent = '{% if language == "zh" %}加载中...{% else %}Loading...{% endif %}';
@@ -507,7 +509,7 @@ async function copyCustomFullPrompt(ci, e) {
   try {
     const resp = await apiFetch('/api/campaigns/{{ campaign_id }}/content/custom/compose-prompt', {
       method: 'POST',
-      body: JSON.stringify({ content_index: ci }),
+      body: JSON.stringify({ content_id: String(key) }),
     });
 
     await navigator.clipboard.writeText(resp.prompt);
@@ -529,10 +531,10 @@ async function copyCustomFullPrompt(ci, e) {
   }
 }
 
-async function generateCustomContent(ci) {
+async function generateCustomContent(key) {
   const loading = document.getElementById('llm-loading');
-  const btn = document.getElementById('custom-gen-btn-' + ci);
-  const resultDiv = document.getElementById('custom-result-' + ci);
+  const btn = document.getElementById('custom-gen-btn-' + key);
+  const resultDiv = document.getElementById('custom-result-' + key);
 
   if (loading) loading.style.display = 'flex';
   if (btn) { btn.disabled = true; btn.textContent = '{% if language == "zh" %}生成中...{% else %}Generating...{% endif %}'; }
@@ -540,7 +542,7 @@ async function generateCustomContent(ci) {
   try {
     const resp = await apiFetch('/api/campaigns/{{ campaign_id }}/content/custom/generate', {
       method: 'POST',
-      body: JSON.stringify({ content_index: ci }),
+      body: JSON.stringify({ content_id: String(key) }),
     });
 
     renderGeneratedContent(

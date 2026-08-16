@@ -7,13 +7,12 @@ class Settings(BaseSettings):
     app_env: str = "development"
 
     # LLM API Keys (loaded from env vars)
-    anthropic_api_key: str = ""
     google_cloud_project: str = ""
     gemini_api_key: str = ""  # Google AI Studio API key (simpler alt to Vertex AI)
     deepseek_api_key: str = ""
     deepseek_base_url: str = "https://api.deepseek.com"
     kimi_api_key: str = ""
-    kimi_base_url: str = "https://api.moonshot.cn/v1"
+    kimi_base_url: str = "https://api.moonshot.cn/v1"  # OpenAI-compatible: keep the /v1 suffix
 
     # External tool URLs
     geo_hub_url: str = "https://geo-strategic-hub-experimental-460989091461.asia-east1.run.app/"

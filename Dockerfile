@@ -1,7 +1,8 @@
 FROM python:3.12-slim
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
-    PYTHONUNBUFFERED=1
+    PYTHONUNBUFFERED=1 \
+    PORT=8080
 
 WORKDIR /app
 
@@ -13,6 +14,7 @@ RUN mkdir -p /app/data/campaigns
 
 RUN pip install --no-cache-dir .
 
-EXPOSE $PORT
+EXPOSE 8080
 
-CMD uvicorn app.main:app --host 0.0.0.0 --port $PORT
+# Cloud Run injects $PORT; the default above keeps `docker run` working locally.
+CMD ["sh", "-c", "exec uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8080}"]
