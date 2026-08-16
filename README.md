@@ -40,6 +40,21 @@ pytest
 ruff check .
 ```
 
+## Deploying to Cloud Run
+
+From Google Cloud Shell:
+
+```bash
+git clone https://github.com/Yude-Jiang/campaign-creator.git
+cd campaign-creator
+./deploy/deploy.sh
+```
+
+The script prints the plan and asks before deploying. See
+[`deploy/README.md`](deploy/README.md) for first-time setup (API enablement,
+Secret Manager, Vertex AI permissions), rollback, and why both instance limits
+must stay at 1 until storage moves off the container disk.
+
 ## Docker
 
 ```bash
