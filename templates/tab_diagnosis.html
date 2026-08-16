@@ -173,13 +173,21 @@ async function uploadFile(file, qid) {
     if (!resp.ok || !data || !data.ok) {
       if (statusEl) {
         var errMsg = (data && data.detail) || ('HTTP ' + resp.status);
-        statusEl.innerHTML = '<span style="color:var(--red);">&#x274C; ' + errMsg + '</span>';
+        replaceChildren(statusEl, el('span', { text: '\u274C ' + errMsg, style: 'color:var(--red);' }));
       }
       return;
     }
     if (statusEl) {
-      statusEl.innerHTML = '<span style="color:var(--green);font-weight:500;">&#x2705; ' + file.name + '</span>'
-        + '<span style="color:var(--slate);font-size:10px;display:block;">' + new Date().toISOString().slice(0, 16) + '</span>';
+      // file.name is user-supplied — insert as text, never as markup.
+      statusEl.textContent = '';
+      statusEl.appendChild(el('span', {
+        text: '\u2705 ' + file.name,
+        style: 'color:var(--green);font-weight:500;',
+      }));
+      statusEl.appendChild(el('span', {
+        text: new Date().toISOString().slice(0, 16),
+        style: 'color:var(--slate);font-size:10px;display:block;',
+      }));
     }
     // Update progress bar — read recommended from DOM data attribute (NOT Jinja2)
     var progressBar = document.getElementById('diag-progress-bar');
@@ -200,7 +208,9 @@ async function uploadFile(file, qid) {
       if (tip) tip.style.display = 'none';
     }
   } catch (err) {
-    if (statusEl) statusEl.innerHTML = '<span style="color:var(--red);">&#x274C; ' + err.message + '</span>';
+    if (statusEl) {
+      replaceChildren(statusEl, el('span', { text: '\u274C ' + err.message, style: 'color:var(--red);' }));
+    }
   }
 }
 </script>

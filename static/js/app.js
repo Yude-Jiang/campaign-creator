@@ -51,11 +51,32 @@ const CampaignState = {
     this.save();
   },
 
-  /** Switch language */
-  setLanguage(lang) {
+  /** Switch language.
+   *
+   * On a campaign page the language is a property of the campaign — it selects
+   * the prompt set for every later generation step — so it must be persisted
+   * server-side, not just tacked onto the URL. Off a campaign page (the
+   * landing form) the ?lang= param is all there is.
+   */
+  async setLanguage(lang) {
+    if (lang === this.current.language && !_campaignId) return;
     this.current.language = lang;
     this.save();
-    // Redirect to same page with updated lang param
+
+    if (_campaignId) {
+      try {
+        await apiFetch(`/api/campaigns/${_campaignId}/language`, {
+          method: 'PUT',
+          body: JSON.stringify({ language: lang }),
+        });
+      } catch (err) {
+        alert('Failed to switch language: ' + err.message);
+        return;
+      }
+      window.location.href = `/campaigns/${_campaignId}`;
+      return;
+    }
+
     const url = new URL(window.location.href);
     url.searchParams.set('lang', lang);
     window.location.href = url.toString();
@@ -129,6 +150,77 @@ document.addEventListener('DOMContentLoaded', () => {
   const startTab = activeTab >= 0 ? activeTab : [...tabButtons].findIndex(b => !b.classList.contains('disabled'));
   if (startTab >= 0 && !_campaignId) switchTabCSS(startTab);
 });
+
+/* ── Safe DOM Helpers ──
+   Everything the LLM produces (generated content, risk-scan messages,
+   channel-fit warnings, error details) can echo text from an uploaded
+   diagnosis file, so it is untrusted markup. These helpers build nodes and
+   set textContent instead of assigning innerHTML. */
+
+const NOTICE_STYLE = 'padding:8px 12px;background:#fffbeb;border:1px solid #fde68a;' +
+  'border-radius:6px;font-size:12px;color:#92400e;';
+const ERROR_STYLE = 'margin-top:8px;padding:12px;background:#fef2f2;border-radius:8px;' +
+  'border:1px solid #fecaca;color:#dc2626;font-size:14px;';
+
+/** Create an element, setting its text via textContent (never innerHTML). */
+function el(tag, { text = '', style = '', className = '' } = {}) {
+  const node = document.createElement(tag);
+  if (text) node.textContent = text;
+  if (style) node.setAttribute('style', style);
+  if (className) node.className = className;
+  return node;
+}
+
+/** Replace a container's children with a single node. */
+function replaceChildren(container, node) {
+  container.textContent = '';
+  if (node) container.appendChild(node);
+}
+
+/** Render an LLM generation result (content + warnings) into `container`. */
+function renderGeneratedContent(container, resp, generatedLabel) {
+  container.textContent = '';
+
+  if (resp.risk_scan && resp.risk_scan.message) {
+    container.appendChild(el('div', {
+      text: '⚠ ' + resp.risk_scan.message,
+      style: 'margin-top:8px;' + NOTICE_STYLE,
+    }));
+  }
+
+  const card = el('div', {
+    style: 'margin-top:8px;padding:16px;background:var(--paper);' +
+           'border-radius:8px;border:1px solid var(--blue);',
+  });
+
+  if (resp.channel_fit_warning) {
+    card.appendChild(el('div', {
+      text: '⚠ ' + resp.channel_fit_warning,
+      style: 'margin-bottom:8px;' + NOTICE_STYLE,
+    }));
+  }
+
+  const meta = el('div', {
+    style: 'font-size:11px;color:var(--slate);margin-bottom:8px;' +
+           'display:flex;justify-content:space-between;',
+  });
+  meta.appendChild(el('span', { text: generatedLabel + ' — ' + (resp.model || 'AI') }));
+  meta.appendChild(el('span', { text: new Date().toISOString().slice(0, 16) }));
+  card.appendChild(meta);
+
+  card.appendChild(el('div', {
+    text: resp.content || '',
+    style: 'white-space:pre-wrap;font-size:14px;max-height:600px;overflow-y:auto;',
+  }));
+
+  container.appendChild(card);
+  container.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+
+/** Render a failure message into `container`. */
+function renderGenerationError(container, prefix, message) {
+  replaceChildren(container, el('div', { text: prefix + message, style: ERROR_STYLE }));
+}
 
 /* ── API Helpers ── */
 async function apiFetch(url, options = {}) {

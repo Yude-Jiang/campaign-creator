@@ -221,21 +221,15 @@ def _mock_request():
 
 def _build_page_context(template_name: str, **extra) -> dict:
     """Build the minimal context that page_context() would provide for rendering."""
-    from app.api import page_context
+    from app.api import build_tabs, page_context
 
+    extra.setdefault("tabs", build_tabs([False] * EXPECTED_TAB_COUNT))
+    extra.setdefault("active_tab", 3)
     return page_context(
         _mock_request(),
         language="zh",
-        tabs=[
-            {"num": "0", "label": "Brief", "id": "tab-brief", "disabled": False},
-            {"num": "1", "label": "Persona & Questions", "id": "tab-persona", "disabled": False},
-            {"num": "2", "label": "GEO Diagnosis", "id": "tab-diagnosis", "disabled": False},
-            {"num": "3", "label": "Campaign Plan", "id": "tab-plan", "disabled": False},
-            {"num": "4", "label": "Content Studio", "id": "tab-content", "disabled": False},
-        ],
         campaign_id="test-campaign",
         campaign=MOCK_CAMPAIGN,
-        active_tab=3,
         **extra,
     )
 
@@ -368,40 +362,36 @@ class TestTabIndexConsistency:
         indices = {int(t["num"]) for t in tabs}
         assert indices == TAB_INDICES, f"Tab indices {indices} don't match expected {TAB_INDICES}"
 
-    def test_pages_home_tabs_match(self):
-        """Home page tab definitions must have EXPECTED_TAB_COUNT entries."""
-        # Extract tab definitions from pages.py source
+    def test_tab_definitions_are_the_single_source(self):
+        """Tab count/indices are defined once and everything else derives from it."""
+        from app.api import MAX_TAB_INDEX, TAB_DEFINITIONS, TAB_TEMPLATES
+
+        assert len(TAB_DEFINITIONS) == EXPECTED_TAB_COUNT
+        assert {int(t["num"]) for t in TAB_DEFINITIONS} == TAB_INDICES
+        assert MAX_TAB_INDEX == EXPECTED_TAB_COUNT - 1
+        assert len(TAB_TEMPLATES) == EXPECTED_TAB_COUNT
+
+    def test_pages_does_not_hardcode_tab_lists(self):
+        """pages.py must build tabs via build_tabs(), not inline dict literals.
+
+        The original bug was three divergent copies of the tab list; a literal
+        reappearing here means the copies are back.
+        """
         pages_src = (APP_DIR / "api" / "pages.py").read_text(encoding="utf-8")
-        # Count how many times tab definitions appear (should be 2: home + campaign-view)
-        tab_lists = re.findall(r'"num":\s*"(\d+)"', pages_src)
-        # Home page tabs: first 5 nums, campaign-view tabs: next 5 nums
-        # Just verify the total pattern is consistent
-        nums = sorted(set(int(n) for n in tab_lists))
-        # pages.py should reference tabs 0-4 in its template switching
-        assert nums == sorted(TAB_INDICES), (
-            f"pages.py references tab indices {nums}, expected {sorted(TAB_INDICES)}"
+        assert '"num":' not in pages_src, (
+            "pages.py contains an inline tab definition — use build_tabs() instead"
         )
+        assert "build_tabs(" in pages_src
 
-    def test_advance_tab_validator_matches(self):
-        """advance_tab endpoint must validate 0 to EXPECTED_TAB_COUNT-1."""
+    def test_advance_tab_validator_derives_from_max_index(self):
+        """advance_tab must bound against MAX_TAB_INDEX, not a hardcoded literal."""
         campaign_src = (APP_DIR / "api" / "campaign.py").read_text(encoding="utf-8")
-        # Find the range check:  if not 0 <= tab <= N:
-        match = re.search(r"if not 0 <= tab <= (\d+):", campaign_src)
-        assert match, "Could not find advance_tab range validator in campaign.py"
-        max_tab = int(match.group(1))
-        assert max_tab == EXPECTED_TAB_COUNT - 1, (
-            f"advance_tab validates tab <= {max_tab}, expected tab <= {EXPECTED_TAB_COUNT - 1}"
+        assert "0 <= tab <= MAX_TAB_INDEX" in campaign_src, (
+            "advance_tab should validate against MAX_TAB_INDEX so the bound "
+            "cannot drift when a tab is added"
         )
-
-    def test_advance_tab_docstring_matches(self):
-        """advance_tab docstring must reflect the actual tab range."""
-        campaign_src = (APP_DIR / "api" / "campaign.py").read_text(encoding="utf-8")
-        # Find docstring mentioning tab range:  (0-N)
-        match = re.search(r"Advance the campaign to a specific tab \(0-(\d+)\)", campaign_src)
-        assert match, "Could not find advance_tab docstring with tab range"
-        doc_max = int(match.group(1))
-        assert doc_max == EXPECTED_TAB_COUNT - 1, (
-            f"advance_tab docstring says 0-{doc_max}, expected 0-{EXPECTED_TAB_COUNT - 1}"
+        assert not re.search(r"if not 0 <= tab <= \d+:", campaign_src), (
+            "advance_tab still uses a hardcoded upper bound"
         )
 
     def test_model_comment_matches(self):
@@ -416,15 +406,15 @@ class TestTabIndexConsistency:
             f"Model comment lists {len(tab_refs)} tabs ({comment}), expected {EXPECTED_TAB_COUNT}"
         )
 
-    def test_pages_template_switch_covers_all_tabs(self):
-        """pages.py must have if/elif branches for all tab indices 0..4."""
-        pages_src = (APP_DIR / "api" / "pages.py").read_text(encoding="utf-8")
-        # Find all:  if current_tab == N:  /  elif current_tab == N:
-        branches = re.findall(r"(?:if|elif) current_tab == (\d+):", pages_src)
-        covered = {int(b) for b in branches}
-        assert covered == TAB_INDICES, (
-            f"Template switch covers tabs {covered}, expected {TAB_INDICES}"
-        )
+    def test_every_tab_index_maps_to_an_existing_template(self):
+        """TAB_TEMPLATES must cover every tab index and point at real files."""
+        from app.api import TAB_TEMPLATES
+
+        assert set(range(len(TAB_TEMPLATES))) == TAB_INDICES
+        for idx, name in enumerate(TAB_TEMPLATES):
+            assert (TEMPLATES_DIR / name).is_file(), (
+                f"Tab {idx} maps to {name}, which does not exist"
+            )
 
     def test_js_navigate_calls_within_range(self):
         """No HTML template should call navigateToTab with index >= EXPECTED_TAB_COUNT."""
@@ -676,3 +666,211 @@ class TestCustomContentAPI:
         )
         # Should render without error (empty custom content section)
         starlette_templates.get_template("tab_content_studio.html").render(ctx)
+
+
+# ═══════════════════════════════════════════════════════════
+# Bug class 4: Untrusted LLM / upload text rendered as markup
+# ═══════════════════════════════════════════════════════════
+
+XSS_PAYLOAD = '<script>alert(1)</script>'
+
+
+class TestExportHtmlEscaping:
+    """Every field in the HTML export originates from LLM output or an uploaded
+    diagnosis file. The report is served same-origin, so unescaped markup would
+    be stored XSS."""
+
+    def _poisoned_plan(self) -> dict:
+        return {
+            "campaign_id": XSS_PAYLOAD,
+            "generated_at": "2026-01-01T00:00:00",
+            "ai_perception_summary": XSS_PAYLOAD,
+            "competitor_landscape": [
+                {"layer": XSS_PAYLOAD, "competitor": XSS_PAYLOAD,
+                 "position": XSS_PAYLOAD, "strategy": XSS_PAYLOAD},
+            ],
+            "priorities": [
+                {
+                    "question_id": XSS_PAYLOAD,
+                    "question_text": XSS_PAYLOAD,
+                    "priority": "P0",
+                    "gap_type": XSS_PAYLOAD,
+                    "anchor_point": XSS_PAYLOAD,
+                    "content_plan": [
+                        {"format": XSS_PAYLOAD, "channel": XSS_PAYLOAD,
+                         "channel_type": XSS_PAYLOAD, "target_persona_id": XSS_PAYLOAD,
+                         "title_suggestion": XSS_PAYLOAD},
+                    ],
+                },
+            ],
+            "timeline_90days": [
+                {"week": XSS_PAYLOAD,
+                 "actions": [{"description": XSS_PAYLOAD, "channel": XSS_PAYLOAD}, XSS_PAYLOAD]},
+            ],
+            "monitoring_metrics": [
+                {"question_id": XSS_PAYLOAD, "expected_recall_position": XSS_PAYLOAD,
+                 "keywords": [XSS_PAYLOAD], "target_models": [XSS_PAYLOAD]},
+            ],
+        }
+
+    def test_no_raw_script_tag_survives_html_export(self):
+        from app.services.export_service import export_to_html
+
+        html = export_to_html(
+            self._poisoned_plan(),
+            {"brief": {"name": XSS_PAYLOAD, "topic": XSS_PAYLOAD}, "questions": [], "diagnoses": []},
+        )
+        assert XSS_PAYLOAD not in html
+        assert "<script>" not in html
+        # ...but the text itself must still be visible, escaped
+        assert "&lt;script&gt;" in html
+
+    def test_priority_badge_class_is_whitelisted(self):
+        """A hostile priority label must not reach the CSS class attribute."""
+        from app.services.export_service import _priority_badge
+
+        badge = _priority_badge('P0" onload="alert(1)')
+        assert 'onload' not in badge or '&quot;' in badge
+        assert badge.startswith('<span class="badge-p2">')
+
+        assert _priority_badge("P1") == '<span class="badge-p1">P1</span>'
+        assert _priority_badge(None) == '<span class="badge-p2">P2</span>'
+
+    def test_coverage_shared_between_markdown_and_html(self):
+        """Both exports must report identical coverage numbers."""
+        from app.services.export_service import export_to_html, export_to_markdown
+
+        plan = {
+            "priorities": [
+                {"question_id": "q1", "priority": "P0", "content_plan": [{"format": "zhihu_long"}]},
+            ],
+            "monitoring_metrics": [],
+        }
+        campaign = {
+            "brief": {"name": "C"},
+            "questions": [
+                {"id": "q1", "diagnostic_value": "high"},
+                {"id": "q2", "diagnostic_value": "high"},
+                {"id": "q3", "diagnostic_value": "low"},
+            ],
+            "diagnoses": [{"question_id": "q1"}],
+        }
+        md = export_to_markdown(plan, campaign)
+        html = export_to_html(plan, campaign)
+        # 3 total questions, 1 prioritized, 1 of 2 high-value covered
+        assert "| Total Questions (all) | 3 |" in md
+        assert "<td>Total Questions (all)</td><td>3</td>" in html
+        assert "| High-Value Covered | 1 / 2 |" in md
+        assert "<td>High-Value Covered</td><td>1 / 2</td>" in html
+
+
+class TestNoUnsafeInnerHtmlInterpolation:
+    """Generated content and upload filenames must go into the DOM as text."""
+
+    JS_SOURCES = ["templates/tab_content_studio.html", "templates/tab_diagnosis.html",
+                  "templates/tab_brief.html", "templates/tab_persona.html", "static/js/app.js"]
+
+    # Interpolating any of these into an innerHTML string re-opens the hole.
+    FORBIDDEN = ["resp.content", "err.message", "file.name", "errMsg",
+                 "resp.risk_scan", "resp.channel_fit_warning"]
+
+    def test_untrusted_values_never_flow_into_innerhtml(self):
+        offenders = []
+        for rel in self.JS_SOURCES:
+            for lineno, line in enumerate((ROOT / rel).read_text(encoding="utf-8").splitlines(), 1):
+                if "innerHTML" not in line:
+                    continue
+                for token in self.FORBIDDEN:
+                    if token in line:
+                        offenders.append(f"{rel}:{lineno}: {token} in innerHTML assignment")
+        assert not offenders, "Untrusted value assigned via innerHTML:\n" + "\n".join(offenders)
+
+
+class TestTabHighlightTracksActiveTab:
+    """The nav strip highlighted `loop.first` instead of the active tab, so the
+    Brief tab stayed lit no matter which page you were on."""
+
+    def _render_nav(self, active_tab: int) -> str:
+        from app.api import build_tabs
+        from app.api.pages import templates as starlette_templates
+
+        ctx = _build_page_context(
+            "tab_plan.html",
+            tabs=build_tabs([False] * EXPECTED_TAB_COUNT),
+            active_tab=active_tab,
+        )
+        return starlette_templates.get_template("base.html").render(ctx)
+
+    def test_base_template_uses_active_tab_not_loop_first(self):
+        base_src = (TEMPLATES_DIR / "base.html").read_text(encoding="utf-8")
+        assert "loop.first" not in base_src, (
+            "base.html highlights the first tab regardless of the active one"
+        )
+        assert "active_tab" in base_src
+
+    @pytest.mark.parametrize("active", [0, 1, 2, 3, 4])
+    def test_exactly_the_active_tab_is_marked(self, active):
+        html = self._render_nav(active)
+        buttons = re.findall(r'<button class="tab-btn[^"]*"', html)
+        assert len(buttons) == EXPECTED_TAB_COUNT
+        marked = [i for i, b in enumerate(buttons) if " active" in b]
+        assert marked == [active], (
+            f"active_tab={active} highlighted tabs {marked}"
+        )
+
+    def test_page_context_defaults_active_tab(self):
+        """Templates must never render without active_tab defined."""
+        from unittest.mock import Mock
+
+        from app.api import page_context
+
+        ctx = page_context(Mock())
+        assert ctx["active_tab"] == 0
+
+
+class TestCampaignLanguageSwitch:
+    """The language toggle rebuilt the URL with ?lang=, but campaign_view always
+    overrode it with the stored campaign language — a dead button."""
+
+    def test_language_endpoint_exists_and_persists(self, tmp_path, monkeypatch):
+        import app.utils.file_handler as fh
+        from app.main import app as fastapi_app
+
+        monkeypatch.setattr(fh, "CAMPAIGNS_DIR", tmp_path / "campaigns")
+        client = TestClient(fastapi_app)
+
+        created = client.post("/api/campaigns", json={
+            "brief": {"name": "lang-test", "topic": "t", "language": "zh"},
+        })
+        assert created.status_code == 200
+        cid = created.json()["campaign_id"]
+
+        resp = client.put(f"/api/campaigns/{cid}/language", json={"language": "en"})
+        assert resp.status_code == 200, resp.text
+        assert resp.json()["language"] == "en"
+
+        stored = client.get(f"/api/campaigns/{cid}").json()
+        assert stored["language"] == "en"
+        assert stored["brief"]["language"] == "en"
+
+    def test_language_endpoint_rejects_unknown_language(self, tmp_path, monkeypatch):
+        import app.utils.file_handler as fh
+        from app.main import app as fastapi_app
+
+        monkeypatch.setattr(fh, "CAMPAIGNS_DIR", tmp_path / "campaigns")
+        client = TestClient(fastapi_app)
+
+        created = client.post("/api/campaigns", json={
+            "brief": {"name": "lang-reject", "topic": "t", "language": "zh"},
+        })
+        cid = created.json()["campaign_id"]
+
+        resp = client.put(f"/api/campaigns/{cid}/language", json={"language": "fr"})
+        assert resp.status_code == 422
+
+    def test_client_persists_language_for_campaigns(self):
+        """setLanguage must hit the API when a campaign is loaded, not just
+        rewrite the query string."""
+        js = (STATIC_DIR / "js" / "app.js").read_text(encoding="utf-8")
+        assert "/language" in js, "setLanguage never calls the language endpoint"
+        assert "_campaignId" in js

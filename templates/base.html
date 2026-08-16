@@ -26,7 +26,7 @@
   <!-- Tab Navigation -->
   <nav class="tab-nav">
     {% for tab in tabs %}
-    <button class="tab-btn {% if tab.disabled %}disabled{% endif %}{% if loop.first %} active{% endif %}"
+    <button class="tab-btn {% if tab.disabled %}disabled{% endif %}{% if loop.index0 == active_tab %} active{% endif %}"
             {{ 'disabled' if tab.disabled else '' }}>
       <span class="tab-num">{{ tab.num }}</span> {{ tab.label }}
     </button>

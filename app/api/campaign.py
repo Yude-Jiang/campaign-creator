@@ -4,11 +4,13 @@ import json
 import logging
 import re
 from datetime import datetime
+from typing import Literal
 
 from fastapi import APIRouter, File, HTTPException, Query, UploadFile
-from fastapi.responses import PlainTextResponse, HTMLResponse
+from fastapi.responses import HTMLResponse, PlainTextResponse
 from pydantic import BaseModel, Field
 
+from app.api import MAX_TAB_INDEX
 from app.models.campaign import Campaign, CampaignBrief
 from app.utils.file_handler import (
     campaign_lock,
@@ -114,11 +116,36 @@ def update_campaign(campaign_id: str, data: dict):
     return {"ok": True, "campaign_id": campaign_id}
 
 
+class LanguageUpdateRequest(BaseModel):
+    language: Literal["zh", "en"]
+
+
+@router.put("/campaigns/{campaign_id}/language")
+def update_language(campaign_id: str, body: LanguageUpdateRequest):
+    """Switch the campaign's working language.
+
+    The campaign language selects the prompt set for every downstream
+    generation step, so it lives in the campaign record rather than in a
+    per-request query parameter. Already-generated content is left untouched.
+    """
+    with campaign_lock(campaign_id):
+        data = load_campaign_json(campaign_id)
+        if not data:
+            raise HTTPException(status_code=404, detail="Campaign 不存在 | Campaign not found")
+        data["language"] = body.language
+        brief = data.get("brief")
+        if isinstance(brief, dict):
+            brief["language"] = body.language
+        data["updated_at"] = datetime.now().isoformat()
+        save_campaign_json(campaign_id, data)
+    return {"ok": True, "language": body.language}
+
+
 @router.put("/campaigns/{campaign_id}/tab")
 def advance_tab(campaign_id: str, tab: int):
-    """Advance the campaign to a specific tab (0-4)."""
-    if not 0 <= tab <= 4:
-        raise HTTPException(status_code=400, detail="Tab must be 0-4")
+    """Advance the campaign to a specific tab."""
+    if not 0 <= tab <= MAX_TAB_INDEX:
+        raise HTTPException(status_code=400, detail=f"Tab must be 0-{MAX_TAB_INDEX}")
     with campaign_lock(campaign_id):
         data = load_campaign_json(campaign_id)
         if not data:

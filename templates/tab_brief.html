@@ -91,6 +91,18 @@ Budget $50K, 3-month timeline
                  placeholder="{% if language == 'zh' %}例如：ZCU / 区域控制器{% else %}e.g. ZCU / Zone Control Unit{% endif %}">
         </div>
 
+        <!-- Industry -->
+        <div class="form-group">
+          <label>
+            {% if language == 'zh' %}所属行业{% else %}Industry{% endif %}
+          </label>
+          <div class="hint" style="font-size:11px;color:var(--slate);margin-bottom:4px;">
+            {% if language == 'zh' %}决定 Persona 研究与内容口吻的行业语境。留空则按通用 B2B 科技处理。{% else %}Sets the industry context for persona research and content voice. Left blank, it falls back to generic B2B technology.{% endif %}
+          </div>
+          <input type="text" class="form-control" id="brief-industry"
+                 placeholder="{% if language == 'zh' %}例如：半导体 / 汽车电子 / 工业自动化 / 生物医药{% else %}e.g. semiconductor / automotive / industrial automation / biotech{% endif %}">
+        </div>
+
         <!-- Target Page URL -->
         <div class="form-group">
           <label>
@@ -206,16 +218,15 @@ async function parseBrief() {
   status.style.display = 'none';
 
   try {
-    const resp = await fetch('/api/parse-brief', {
+    const data = await apiFetch('/api/parse-brief', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ text, language: '{{ language }}' }),
     });
-    const data = await resp.json();
 
     // Populate form fields
     if (data.name) document.getElementById('brief-name').value = data.name || '';
     if (data.topic) document.getElementById('brief-topic').value = data.topic || '';
+    if (data.industry) document.getElementById('brief-industry').value = data.industry || '';
     if (data.target_page_url) document.getElementById('brief-url').value = data.target_page_url || '';
     if (data.products) {
       const products = Array.isArray(data.products) ? data.products.join(', ') : data.products;
@@ -241,10 +252,16 @@ async function parseBrief() {
     if (indicator) indicator.style.display = 'inline';
 
     status.style.display = 'block';
-    status.innerHTML = '<span style="color:var(--green);">✅ {% if language == "zh" %}AI 解析完成 — 请审核下方字段，确认后点击底部按钮{% else %}Parsed! Review fields below, then click the button below{% endif %}</span>';
+    replaceChildren(status, el('span', {
+      text: '✅ {% if language == "zh" %}AI 解析完成 — 请审核下方字段，确认后点击底部按钮{% else %}Parsed! Review fields below, then click the button below{% endif %}',
+      style: 'color:var(--green);',
+    }));
   } catch (err) {
     status.style.display = 'block';
-    status.innerHTML = '<span style="color:var(--red);">❌ {% if language == "zh" %}解析失败：{% else %}Parse failed: {% endif %}' + err.message + '</span>';
+    replaceChildren(status, el('span', {
+      text: '❌ {% if language == "zh" %}解析失败：{% else %}Parse failed: {% endif %}' + err.message,
+      style: 'color:var(--red);',
+    }));
   } finally {
     btn.disabled = false;
     btn.textContent = '{% if language == "zh" %}🤖 AI 解析 → 自动填充表单{% else %}🤖 Parse with AI → Auto-fill Form{% endif %}';
@@ -256,6 +273,7 @@ async function submitBrief(e) {
 
   const name = document.getElementById('brief-name').value.trim();
   const topic = document.getElementById('brief-topic').value.trim();
+  const industry = document.getElementById('brief-industry').value.trim();
   const url = document.getElementById('brief-url').value.trim();
   const products = document.getElementById('brief-products').value.trim();
   const keywords = document.getElementById('brief-keywords').value.trim();
@@ -280,7 +298,7 @@ async function submitBrief(e) {
   }
 
   const brief = {
-    name, topic, target_page_url: url,
+    name, topic, industry, target_page_url: url,
     products: products.split(',').map(s => s.trim()).filter(Boolean),
     keywords: keywords.split(',').map(s => s.trim()).filter(Boolean),
     competitors_known: competitors.split(',').map(s => s.trim()).filter(Boolean),
