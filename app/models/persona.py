@@ -23,7 +23,11 @@ class Persona(BaseModel):
     vp_proof_points: list[str] = Field(default_factory=list)
     vp_competitor_comparison: dict[str, str] = Field(default_factory=dict)
     anchor: str = ""                        # Master persona code (e.g. "m01") — internal only
-    basis: Literal["research", "generated"] = "generated"
+    # anchored = instantiated from a master persona skeleton (human-authored
+    # decision_role / funnel_stage / channels). generated = freely produced by
+    # the model. "research" is the legacy spelling of "anchored" and is kept so
+    # campaigns created before the rename still validate.
+    basis: Literal["anchored", "generated", "research"] = "generated"
     decision_role: str = ""                 # gatekeeper | decision_maker | implementer
     funnel_stage: str = ""                  # why | what | how
     preferred_channels: list[str] = Field(default_factory=list)

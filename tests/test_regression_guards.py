@@ -1218,3 +1218,140 @@ class TestVpPromptDoesNotDemandFabrication:
         assert "定性判断" in zh
         en = self._render("en", [])
         assert "stated qualitatively" in en
+
+
+class TestPersonaGenerationFailsLoudly:
+    """Phase 1 returning nothing used to substitute a single empty placeholder
+    persona and report success, so every downstream step — VPs, questions, the
+    whole plan — was built on a fabricated audience."""
+
+    def _campaign(self):
+        return {"campaign_id": "c", "language": "zh", "brief": dict(MOCK_BRIEF)}
+
+    def test_no_personas_raises_instead_of_fabricating(self, monkeypatch):
+        import asyncio
+
+        import app.services.persona_service as ps
+
+        async def fake_route(**kwargs):
+            return {"text": '{"personas": []}', "model": "gemini",
+                    "grounding_requested": True, "grounding_used": False,
+                    "grounding_sources": [], "grounding_queries": []}
+
+        monkeypatch.setattr(ps.llm_router, "route_and_generate", fake_route)
+
+        with pytest.raises(RuntimeError) as exc:
+            asyncio.run(
+                ps.generate_personas_and_questions(self._campaign(), language="zh")
+            )
+        assert "gemini" in str(exc.value)
+
+    def test_no_placeholder_persona_remains_in_source(self):
+        src = (APP_DIR / "services" / "persona_service.py").read_text(encoding="utf-8")
+        assert '"id": "prac_default"' not in src, (
+            "the silent placeholder persona is back"
+        )
+
+    def test_endpoint_maps_upstream_failure_to_502(self, tmp_path, monkeypatch):
+        import app.services.persona_service as ps
+        import app.utils.file_handler as fh
+        from app.main import app as fastapi_app
+
+        monkeypatch.setattr(fh, "CAMPAIGNS_DIR", tmp_path / "campaigns")
+
+        async def boom(*a, **kw):
+            raise RuntimeError("Persona 生成失败 | Persona generation failed")
+
+        monkeypatch.setattr(ps, "generate_personas_and_questions", boom)
+
+        client = TestClient(fastapi_app, raise_server_exceptions=False)
+        cid = client.post("/api/campaigns", json={
+            "brief": {"name": "fail-loud", "topic": "t", "language": "zh"},
+        }).json()["campaign_id"]
+
+        resp = client.post(f"/api/campaigns/{cid}/persona/generate")
+        assert resp.status_code == 502, resp.text
+        assert "Persona generation failed" in resp.json()["detail"]
+
+        # The campaign must be left untouched, not half-written.
+        stored = client.get(f"/api/campaigns/{cid}").json()
+        assert stored["personas"] == []
+
+
+class TestPersonaBasisIsVisible:
+    """`basis` was computed, stored, stripped from exports, and never shown —
+    so a reader could not tell which personas carried human-authored
+    constraints. Its value also read as 'web-researched', which it never was."""
+
+    def test_value_is_anchored_not_research(self):
+        src = (APP_DIR / "services" / "persona_service.py").read_text(encoding="utf-8")
+        assert '"anchored" if p.get("anchor") else "generated"' in src
+        assert '"research" if p.get("anchor")' not in src
+
+    def test_model_still_accepts_the_legacy_value(self):
+        from app.models.persona import Persona
+
+        assert Persona(basis="anchored").basis == "anchored"
+        assert Persona(basis="generated").basis == "generated"
+        # Campaigns written before the rename must still load.
+        assert Persona(basis="research").basis == "research"
+
+    @pytest.mark.parametrize("basis,expected,forbidden", [
+        ("anchored", "骨架锚定", "自由生成"),
+        ("research", "骨架锚定", "自由生成"),   # legacy spelling
+        ("generated", "自由生成", "骨架锚定"),
+        ("", "自由生成", "骨架锚定"),           # missing → not anchored
+    ])
+    def test_card_shows_provenance_chip(self, basis, expected, forbidden):
+        from app.api.pages import templates as starlette_templates
+
+        campaign = dict(MOCK_CAMPAIGN)
+        campaign["personas"] = [{
+            "id": "p1", "name": "架构师", "layer": "practitioner", "basis": basis,
+        }]
+        ctx = _build_page_context("tab_persona.html", campaign=campaign, active_tab=1)
+        html = starlette_templates.get_template("tab_persona.html").render(ctx)
+        assert expected in html
+        assert forbidden not in html
+
+    def test_basis_stays_out_of_client_facing_exports(self):
+        """Visible in the app, not in the deliverable — unchanged behaviour."""
+        from app.services.export_service import _scrub_persona_for_export
+
+        scrubbed = _scrub_persona_for_export(
+            {"name": "A", "basis": "anchored", "anchor": "m01"}
+        )
+        assert scrubbed == {"name": "A"}
+
+
+class TestMasterPersonaProvenance:
+    """The skeletons are the only human-authored input to persona generation;
+    their provenance file was gitignored, so the basis for the one trustworthy
+    layer lived only on someone's laptop."""
+
+    PROVENANCE = APP_DIR / "data" / "master_personas" / "PROVENANCE.md"
+
+    def test_provenance_file_is_tracked(self):
+        assert self.PROVENANCE.is_file(), "PROVENANCE.md is missing"
+        gitignore = (ROOT / ".gitignore").read_text(encoding="utf-8")
+        for line in gitignore.splitlines():
+            stripped = line.strip()
+            if stripped.startswith("#") or not stripped:
+                continue
+            assert "PROVENANCE" not in stripped, (
+                f".gitignore excludes the provenance record again: {line!r}"
+            )
+
+    def test_every_skeleton_has_a_provenance_entry(self):
+        import json
+
+        text = self.PROVENANCE.read_text(encoding="utf-8")
+        skeletons = sorted(
+            (APP_DIR / "data" / "master_personas").glob("m*.json")
+        )
+        assert skeletons, "no master persona skeletons found"
+        for f in skeletons:
+            code = json.loads(f.read_text(encoding="utf-8"))["code"]
+            assert f"### {code}" in text, (
+                f"{f.name} (code {code}) has no Sources section in PROVENANCE.md"
+            )

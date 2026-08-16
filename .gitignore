@@ -10,7 +10,9 @@ __pycache__/
 # Runtime data (contains API keys in campaign JSON)
 data/
 !app/data/
-app/data/master_personas/PROVENANCE.md
+# NOTE: PROVENANCE.md used to be ignored here. The master persona skeletons are
+# the only human-authored input to persona generation, so the record of where
+# they came from belongs in the repo alongside them.
 
 # Temp files
 tmp_*

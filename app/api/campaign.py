@@ -249,7 +249,13 @@ async def generate_persona(campaign_id: str):
     from app.services.persona_service import generate_personas_and_questions
 
     # LLM call (no lock held — can take 30-120s)
-    result = await generate_personas_and_questions(data, language=language)
+    try:
+        result = await generate_personas_and_questions(data, language=language)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+    except RuntimeError as e:
+        # Upstream model failure (no personas parsed, whole chain unavailable).
+        raise HTTPException(status_code=502, detail=str(e)) from e
 
     # Write results under lock
     with campaign_lock(campaign_id):

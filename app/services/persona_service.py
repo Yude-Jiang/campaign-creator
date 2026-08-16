@@ -165,12 +165,22 @@ async def generate_personas_and_questions(
     )
 
     if not personas:
-        logger.warning("Phase 1 returned no personas — using fallback")
-        personas = [{
-            "id": "prac_default",
-            "name": "技术决策者" if language == "zh" else "Technical Decision Maker",
-            "layer": "practitioner",
-        }]
+        # Previously this substituted a single empty placeholder persona and
+        # returned ok — the caller could not tell generation had failed, and
+        # every downstream step (VPs, questions, the whole plan) was built on
+        # a fabricated audience. Fail loudly instead.
+        logger.error(
+            "Phase 1 produced no personas (model=%s). Raw output head: %s",
+            p1_result.get("model", "?"),
+            (p1_result.get("text") or "")[:300],
+        )
+        raise RuntimeError(
+            "Persona 生成失败：模型未返回任何 persona（model="
+            f"{p1_result.get('model', '?')}）。请重试；若反复失败，检查模型配置或简化 Brief。 | "
+            "Persona generation failed: the model returned no personas "
+            f"(model={p1_result.get('model', '?')}). Retry; if it keeps failing, "
+            "check model configuration or simplify the Brief."
+        )
 
     # Scrub leaked codes + validate anchors against loaded master set
     valid_codes = {mp["code"] for mp in master_personas}
@@ -179,7 +189,11 @@ async def generate_personas_and_questions(
         anchor = p.get("anchor", "")
         if anchor and anchor not in valid_codes:
             p["anchor"] = ""
-        p["basis"] = "research" if p.get("anchor") else "generated"
+        # "anchored" = instantiated from a hand-written master skeleton, so its
+        # decision_role / funnel_stage / channel preferences carry human
+        # authorship. It does NOT mean the persona was web-researched — the
+        # earlier value "research" was routinely read that way.
+        p["basis"] = "anchored" if p.get("anchor") else "generated"
 
     # Ensure defaults on all personas
     personas = [_ensure_persona_defaults(p) for p in personas]
@@ -200,6 +214,13 @@ async def generate_personas_and_questions(
     p2_parsed = safe_parse_json(p2_result["text"])
     value_props = p2_parsed.get("value_propositions", [])
     models_used.append(f"vps:{p2_result['model']}")
+    if not value_props:
+        logger.error(
+            "Phase 2 produced no value propositions (model=%s) — personas will "
+            "have empty VP fields. Raw output head: %s",
+            p2_result.get("model", "?"),
+            (p2_result.get("text") or "")[:300],
+        )
 
     # Merge VP data back into personas
     vp_map = {vp["persona_id"]: vp for vp in value_props if "persona_id" in vp}
