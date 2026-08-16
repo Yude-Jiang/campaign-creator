@@ -317,6 +317,113 @@ def _find_question(questions: list[dict], question_id: str) -> str:
     return ""
 
 
+# ── Diagnostic context ──
+# The whole premise of the tool is diagnosis-driven content, but generation used
+# to receive only `anchor_point` from the priority item. Everything the GEO
+# diagnosis established — which gap this piece is meant to close, how visible
+# the brand currently is, who owns the answer today, what the models actually
+# said — was discarded before the writing step. That is why output reads
+# generic: it did not know what it was for.
+
+# Each gap type calls for a structurally different piece, not a different tone.
+GAP_TYPE_STRATEGY: dict[str, dict[str, str]] = {
+    "open_gap": {
+        "zh": "无人占位：该问题下没有任何厂商建立起权威答案。内容目标是**定义品类和评价维度**——"
+              "先把问题结构讲清楚，再让本品牌方案成为该框架下的自然答案。抢定义权优先于抢曝光。",
+        "en": "Open gap: no vendor owns the answer here. The goal is to **define the category and its "
+              "evaluation criteria** — frame the problem first, then let this solution follow naturally "
+              "from that frame. Owning the definition matters more than visibility.",
+    },
+    "rival_owned": {
+        "zh": "竞品占位：AI 已把该问题的答案绑定到竞品。正面比参数会强化对方的框架。内容目标是"
+              "**重构评价维度**——指出现有答案在什么使用场景下不成立，用一个对读者更重要的新维度切入。",
+        "en": "Rival-owned: the models already bind this answer to a competitor. Competing on their "
+              "parameters reinforces their frame. The goal is to **reframe the evaluation axis** — show "
+              "where the incumbent answer breaks down, and lead with a dimension that matters more.",
+    },
+    "not_linked": {
+        "zh": "认知未关联：品牌本身被认知，但没有和这个主题建立联系。内容目标是**建立证据链**——"
+              "把品牌既有能力和该问题显式连起来，让关联关系在文本中可被直接提取，而不是靠读者推断。",
+        "en": "Not linked: the brand is known but not connected to this topic. The goal is to **build the "
+              "evidence chain** — state the connection between existing capability and this problem "
+              "explicitly, so it can be extracted directly rather than inferred.",
+    },
+    "buried_in_pdf": {
+        "zh": "信息被埋：答案存在于 datasheet/白皮书里，但模型提取不到。内容目标是**结构化重述**——"
+              "把已有事实改写成可直接引用的问答式段落，每段自带完整上下文，不依赖前文指代。",
+        "en": "Buried: the answer exists in datasheets or whitepapers but models cannot extract it. The "
+              "goal is a **structured restatement** — rewrite known facts as self-contained, quotable "
+              "passages that carry their own context.",
+    },
+}
+
+
+def _diagnosis_excerpt(campaign_data: dict, question_id: str, limit: int = 1200) -> str:
+    """Return the raw diagnosis text for one question, trimmed.
+
+    Reading the file here is deliberate: the analysis and plan steps compress
+    the diagnosis into scores and an anchor, which loses the specifics a writer
+    needs — which competitors the models named, what they got wrong.
+    """
+    if not question_id:
+        return ""
+    diagnoses = campaign_data.get("diagnoses") or []
+    # Older campaigns stored bare filenames here rather than dicts.
+    entry = next(
+        (d for d in diagnoses
+         if isinstance(d, dict) and d.get("question_id") == question_id),
+        None,
+    )
+    if not entry:
+        return ""
+
+    raw = entry.get("raw_text") or ""
+    if not raw and entry.get("filename"):
+        try:
+            from app.utils.file_handler import read_diagnosis_file
+
+            raw = read_diagnosis_file(
+                campaign_data.get("campaign_id", ""), entry["filename"]
+            ) or ""
+        except Exception as e:  # a missing file must not block writing
+            logger.warning("Could not read diagnosis for %s: %s", question_id, e)
+            return ""
+    return raw.strip()[:limit]
+
+
+def _diagnostic_context(campaign_data: dict, priority_item: dict, language: str) -> dict[str, Any]:
+    """Assemble what the diagnosis established about this specific question."""
+    plan = campaign_data.get("plan") or {}
+    gap_type = str(priority_item.get("gap_type") or "").strip()
+    strategy = GAP_TYPE_STRATEGY.get(gap_type, {}).get(language, "")
+
+    # Only competitors the plan actually named — a full landscape dump would
+    # crowd out the persona and asset sections.
+    landscape = [
+        {
+            "competitor": c.get("competitor", ""),
+            "position": c.get("position", ""),
+            "strategy": c.get("st_strategy") or c.get("strategy") or "",
+        }
+        for c in (plan.get("competitor_landscape") or [])[:4]
+        if c.get("competitor")
+    ]
+
+    return {
+        "gap_type": gap_type,
+        "gap_strategy": strategy,
+        "priority_label": priority_item.get("priority", ""),
+        "st_current_strength": priority_item.get("st_current_strength"),
+        "winnability": priority_item.get("winnability"),
+        "strategic_importance": priority_item.get("strategic_importance"),
+        "ai_perception_summary": str(plan.get("ai_perception_summary") or "")[:600],
+        "competitor_landscape": landscape,
+        "diagnosis_excerpt": _diagnosis_excerpt(
+            campaign_data, priority_item.get("question_id", "")
+        ),
+    }
+
+
 def _build_variables(
     campaign_data: dict,
     content_item: dict,
@@ -325,6 +432,7 @@ def _build_variables(
     anchor_point: str,
     subject_fallback: str = "",
     format_override: str | None = None,
+    diagnostic: dict[str, Any] | None = None,
 ) -> tuple[dict[str, Any], str, str, str, bool, int]:
     """Resolve the template for a content item and build its Jinja2 variables.
 
@@ -377,14 +485,27 @@ def _build_variables(
     )
     variables["data_assets"] = campaign_data.get("data_assets", [])
 
-    # Persona-derived context, sliced to keep the prompt from bloating.
+    # Persona-derived context. Still sliced to keep the prompt bounded, but the
+    # fields a writer actually argues from — decision criteria, trusted sources,
+    # proof points — were missing entirely.
     p = persona or {}
-    variables["persona_pain_points"] = p.get("pain_points", [])[:3]
+    variables["persona_pain_points"] = p.get("pain_points", [])[:4]
     variables["persona_vp_headline"] = p.get("vp_headline", "")
     variables["persona_vp_argument"] = p.get("vp_argument", "")
-    variables["persona_objections"] = p.get("objections", [])[:2]
+    variables["persona_objections"] = p.get("objections", [])[:3]
     variables["persona_search_queries"] = p.get("search_queries", [])[:5]
     variables["persona_info_channels"] = p.get("info_channels", [])[:3]
+    variables["persona_decision_criteria"] = p.get("decision_criteria", [])[:5]
+    variables["persona_trusted_sources"] = p.get("trusted_sources", [])[:4]
+    variables["persona_daily_tasks"] = p.get("daily_tasks", [])[:3]
+    variables["persona_tech_depth"] = p.get("tech_depth", "")
+    variables["persona_funnel_stage"] = p.get("funnel_stage", "")
+    variables["persona_decision_role"] = p.get("decision_role", "")
+    variables["persona_vp_proof_points"] = p.get("vp_proof_points", [])[:5]
+    variables["persona_vp_competitor_comparison"] = p.get("vp_competitor_comparison", {})
+
+    # What the GEO diagnosis established about this question.
+    variables["diagnostic"] = diagnostic or {}
 
     return variables, format_str, template_name, task_key, needs_keywords, max_tokens
 
@@ -409,6 +530,7 @@ def _build_content_variables(
         raise ValueError(f"priority_index {priority_index} out of range (0-{len(priorities) - 1})")
 
     priority_item = priorities[priority_index]
+    lang = campaign_data.get("language", "zh")
     content_plan = priority_item.get("content_plan", [])
     if content_index < 0 or content_index >= len(content_plan):
         raise ValueError(
@@ -422,6 +544,7 @@ def _build_content_variables(
         question_id=priority_item.get("question_id", ""),
         anchor_point=priority_item.get("anchor_point", ""),
         format_override=format_override,
+        diagnostic=_diagnostic_context(campaign_data, priority_item, lang),
     )
     return variables, content_item, format_str, template_name, task_key, max_tokens
 

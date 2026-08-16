@@ -1755,3 +1755,193 @@ class TestUnknownFormatRecovery:
         assert "askForFormat" in tmpl
         assert "available_formats" in tmpl
         assert "format_override" in tmpl
+
+
+# ═══════════════════════════════════════════════════════════
+# Content generation must be diagnosis-driven
+# ═══════════════════════════════════════════════════════════
+
+CONTENT_TEMPLATES = sorted(
+    f"{p.parent.name}/{p.name}"
+    for p in (APP_DIR / "prompts").glob("*/content_*.md")
+)
+
+
+class TestDiagnosisReachesContentGeneration:
+    """The premise of the tool is diagnosis-driven content, but generation only
+    ever received `anchor_point` from the priority item. Everything the GEO
+    diagnosis established — the gap type, current visibility, who owns the
+    answer, what the models actually said — was discarded before writing."""
+
+    CAMPAIGN = {
+        "language": "zh", "campaign_id": "diag",
+        "brief": {"name": "C", "topic": "ZCU", "industry": "半导体",
+                  "products": ["P3E"], "keywords": ["ZCU"],
+                  "target_page_url": "https://e.com", "competitors_known": ["NXP S32G"]},
+        "personas": [{
+            "id": "p1", "name": "架构师", "layer": "practitioner", "tech_depth": "deep",
+            "decision_role": "implementer", "funnel_stage": "how",
+            "pain_points": ["数据手册不透明"], "decision_criteria": ["功能安全认证完整性"],
+            "trusted_sources": ["EET China 技术拆解专栏"], "search_queries": ["ZCU 选型"],
+            "info_channels": ["知乎"], "objections": ["锁定风险"],
+            "vp_headline": "一颗芯片覆盖 ZCU", "vp_proof_points": ["AUTOSAR 双平台"],
+            "vp_competitor_comparison": {"vs NXP S32G": "集成度更高"},
+        }],
+        "questions": [{"id": "q1", "text": "ZCU 主控怎么选？"}],
+        "diagnoses": [{"question_id": "q1", "filename": "q1.md",
+                       "raw_text": "多数模型首推 NXP S32G，本品牌未被提及。"}],
+        "plan": {
+            "ai_perception_summary": "AI 在 ZCU 品类下几乎不提及本品牌。",
+            "competitor_landscape": [{"competitor": "NXP S32G", "position": "AI 默认首选",
+                                      "st_strategy": "重构评价维度"}],
+            "priorities": [{
+                "question_id": "q1", "question_text": "ZCU 主控怎么选？", "priority": "P0",
+                "gap_type": "rival_owned", "st_current_strength": 1, "winnability": 4,
+                "strategic_importance": 5, "anchor_point": "功能安全文档完整度",
+                "content_plan": [{"format": "zhihu_long", "channel": "知乎",
+                                  "target_persona_id": "p1"}],
+            }],
+        },
+    }
+
+    def _prompt(self) -> str:
+        from app.services.content_service import compose_prompt
+
+        return compose_prompt(self.CAMPAIGN, 0, 0, language="zh")["prompt"]
+
+    def test_gap_type_strategy_reaches_the_prompt(self):
+        prompt = self._prompt()
+        assert "rival_owned" in prompt
+        assert "重构评价维度" in prompt, (
+            "the gap type must bring its content strategy, not just its name"
+        )
+
+    def test_every_gap_type_has_a_strategy_in_both_languages(self):
+        from app.models.diagnosis import GEODiagnosisResult
+        from app.services.content_service import GAP_TYPE_STRATEGY
+
+        declared = GEODiagnosisResult.model_fields["gap_type"].annotation
+        for gap in getattr(declared, "__args__", ()):
+            assert gap in GAP_TYPE_STRATEGY, f"gap type {gap!r} has no content strategy"
+            assert set(GAP_TYPE_STRATEGY[gap]) >= {"zh", "en"}
+            assert all(GAP_TYPE_STRATEGY[gap][lang].strip() for lang in ("zh", "en"))
+
+    def test_current_visibility_reaches_the_prompt(self):
+        prompt = self._prompt()
+        assert "1/5" in prompt
+        assert "几乎不可见" in prompt, (
+            "a strength of 1 should tell the writer not to assume prior awareness"
+        )
+
+    def test_competitor_landscape_and_perception_summary_reach_the_prompt(self):
+        prompt = self._prompt()
+        assert "NXP S32G" in prompt
+        assert "AI 默认首选" in prompt
+        assert "几乎不提及本品牌" in prompt
+
+    def test_raw_diagnosis_excerpt_reaches_the_prompt(self):
+        """The scores and anchor lose what the models actually said."""
+        prompt = self._prompt()
+        assert "多数模型首推 NXP S32G" in prompt
+
+    def test_persona_fields_a_writer_argues_from_reach_the_prompt(self):
+        prompt = self._prompt()
+        for expected, why in [
+            ("功能安全认证完整性", "decision_criteria"),
+            ("EET China 技术拆解专栏", "trusted_sources"),
+            ("AUTOSAR 双平台", "vp_proof_points"),
+            ("vs NXP S32G", "vp_competitor_comparison"),
+        ]:
+            assert expected in prompt, f"{why} is missing from the prompt"
+
+    def test_custom_content_has_no_diagnostic_block(self):
+        """Custom items are not plan-derived, so there is no diagnosis to show."""
+        from app.services.content_service import compose_custom_prompt
+
+        campaign = dict(self.CAMPAIGN)
+        campaign["custom_content"] = [{
+            "id": "cc_1", "format": "zhihu_long", "target_persona_id": "p1",
+            "topic": "自定义主题",
+        }]
+        prompt = compose_custom_prompt(campaign, "cc_1", language="zh")["prompt"]
+        assert "GEO 诊断结论" not in prompt
+        assert "自定义主题" in prompt
+
+    @pytest.mark.parametrize("template", CONTENT_TEMPLATES)
+    def test_every_template_includes_the_diagnostic_partial(self, template):
+        src = (APP_DIR / "prompts" / template).read_text(encoding="utf-8")
+        assert "_shared/diagnostic_context.md" in src, (
+            f"{template} does not receive the diagnosis"
+        )
+
+
+class TestContentPromptsDoNotInviteFabrication:
+    @pytest.mark.parametrize("template", CONTENT_TEMPLATES)
+    def test_no_template_asks_for_invented_links(self, template):
+        """One rule told the model to embed links to companion content that does
+        not exist yet, which can only be satisfied by inventing URLs."""
+        src = (APP_DIR / "prompts" / template).read_text(encoding="utf-8")
+        assert "嵌入 1-2 个指向本 Campaign 关联内容的链接" not in src
+        if "互链" in src or "cross-link" in src.lower():
+            assert ("不要编造 URL" in src) or ("never invent a URL" in src), (
+                f"{template} mentions cross-linking without forbidding invented URLs"
+            )
+
+    @pytest.mark.parametrize("template", CONTENT_TEMPLATES)
+    def test_no_assets_branch_says_what_to_do_instead(self, template):
+        """Forbidding numbers while demanding a technical comparison is the same
+        contradiction the VP prompt had; the templates must resolve it."""
+        src = (APP_DIR / "prompts" / template).read_text(encoding="utf-8")
+        assert "{% if not data_assets %}" in src, (
+            f"{template} has no guidance for the no-data-assets case"
+        )
+
+
+class TestAllContentTemplatesRender:
+    """A Jinja error in any branch would surface only at generation time."""
+
+    VARS = {
+        "brief": {"name": "C", "topic": "ZCU", "industry": "半导体", "products": ["P3E"],
+                  "keywords": ["ZCU"], "target_page_url": "https://e.com",
+                  "competitors_known": ["NXP"]},
+        "persona": {"id": "p1", "name": "架构师", "layer": "practitioner"},
+        "anchor_point": "锚点", "question_text": "问题？", "content_brief": "指引",
+        "keywords": ["ZCU"],
+        "persona_pain_points": ["痛点"], "persona_vp_headline": "VP",
+        "persona_vp_argument": "论述", "persona_objections": ["异议"],
+        "persona_search_queries": ["搜索词"], "persona_info_channels": ["知乎"],
+        "persona_decision_criteria": ["标准"], "persona_trusted_sources": ["信源"],
+        "persona_daily_tasks": ["任务"], "persona_tech_depth": "deep",
+        "persona_funnel_stage": "how", "persona_decision_role": "implementer",
+        "persona_vp_proof_points": ["论据"],
+        "persona_vp_competitor_comparison": {"vs NXP": "更集成"},
+    }
+    DIAGNOSTIC = {
+        "gap_type": "rival_owned", "gap_strategy": "重构评价维度",
+        "st_current_strength": 1, "winnability": 4,
+        "ai_perception_summary": "AI 不提本品牌",
+        "competitor_landscape": [{"competitor": "NXP", "position": "首选", "strategy": "重构"}],
+        "diagnosis_excerpt": "模型首推 NXP。",
+    }
+
+    @pytest.mark.parametrize("template", CONTENT_TEMPLATES)
+    @pytest.mark.parametrize("has_diag", [True, False])
+    @pytest.mark.parametrize("has_assets", [True, False])
+    def test_renders_in_every_combination(self, template, has_diag, has_assets):
+        from app.services.llm_router import _jinja_env
+
+        _jinja_env.get_template(template).render(
+            **self.VARS,
+            diagnostic=self.DIAGNOSTIC if has_diag else {},
+            data_assets=[{"claim": "x", "source": "y"}] if has_assets else [],
+        )
+
+    @pytest.mark.parametrize("template", CONTENT_TEMPLATES)
+    def test_diagnostic_block_absent_when_there_is_no_diagnosis(self, template):
+        from app.services.llm_router import _jinja_env
+
+        rendered = _jinja_env.get_template(template).render(
+            **self.VARS, diagnostic={}, data_assets=[]
+        )
+        assert "GEO 诊断结论" not in rendered
+        assert "GEO Diagnosis (the perception gap" not in rendered

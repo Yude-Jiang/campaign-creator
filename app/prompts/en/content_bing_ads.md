@@ -28,15 +28,26 @@ The following patterns must NEVER appear in final output:
 {{ content_brief }}
 {% endif %}
 
+{% include "en/_shared/diagnostic_context.md" %}
+
 ## Audience Intelligence
 
-- **Target Audience**: {{ persona.name if persona else 'Engineers / Decision Makers' }}
-{% if persona_pain_points %}- **Key Pain Points**: {{ persona_pain_points | join('; ') }}{% endif %}
-{% if persona_vp_headline %}- **Core Value Proposition**: {{ persona_vp_headline }}{% endif %}
-{% if persona_vp_argument %}- **VP Argument**: {{ persona_vp_argument }}{% endif %}
-{% if persona_objections %}- **Likely Objections** (preempt in argument): {{ persona_objections | join('; ') }}{% endif %}
-{% if persona_search_queries %}- **Target Search Queries**: {{ persona_search_queries | join(', ') }}{% endif %}
-{% if persona_info_channels %}- **Info Channel Preferences**: {{ persona_info_channels | join(', ') }}{% endif %}
+- **Reader**: {{ persona.name }} ({{ persona.layer }}){% if persona_tech_depth %} · tech depth {{ persona_tech_depth }}{% endif %}{% if persona_decision_role %} · role {{ persona_decision_role }}{% endif %}
+{% if persona_daily_tasks %}- **Daily work**: {{ persona_daily_tasks | join('; ') }}{% endif %}
+{% if persona_pain_points %}- **Pain points**: {{ persona_pain_points | join('; ') }}{% endif %}
+{% if persona_decision_criteria %}- **Decision criteria** (ranked; the argument must cover the top two): {{ persona_decision_criteria | join(' > ') }}{% endif %}
+{% if persona_vp_headline %}- **Value proposition**: {{ persona_vp_headline }}{% endif %}
+{% if persona_vp_argument %}- **Argument**: {{ persona_vp_argument }}{% endif %}
+{% if persona_vp_proof_points %}- **Available evidence** (build the body around these rather than inventing new ones):
+{% for pt in persona_vp_proof_points %}  - {{ pt }}
+{% endfor %}{% endif %}
+{% if persona_vp_competitor_comparison %}- **Competitor positioning**:
+{% for k, v in persona_vp_competitor_comparison.items() %}  - {{ k }}: {{ v }}
+{% endfor %}{% endif %}
+{% if persona_objections %}- **Anticipated objections** (pre-empt in the argument): {{ persona_objections | join('; ') }}{% endif %}
+{% if persona_trusted_sources %}- **Sources this reader trusts** (write toward these, not toward a press release): {{ persona_trusted_sources | join('; ') }}{% endif %}
+{% if persona_search_queries %}- **Real search phrasings** (title and subheads should echo these): {{ persona_search_queries | join(' / ') }}{% endif %}
+{% if persona_info_channels %}- **Channels**: {{ persona_info_channels | join(', ') }}{% endif %}
 
 ## Ad Background
 
@@ -46,6 +57,26 @@ The following patterns must NEVER appear in final output:
 - **Keywords**: {{ keywords | join(', ') }}
 - **Target Page**: {{ brief.target_page_url }}
 
+{% if not data_assets %}
+### ⚠ No verified data assets for this campaign
+
+So **no specific numbers anywhere** (performance figures, percentages, durations,
+ratios, certification identifiers, customer or volume counts). That is not a
+licence to be shallow — build depth on **mechanism and trade-off** instead of
+on parameters:
+
+- Replace parameter comparison with **architectural mechanism**: "lockstep cores
+  cross-check in the same clock domain, so fault detection does not depend on a
+  software poll" is technical depth; "99.9% detection rate" is invention.
+- Replace performance ranking with **trade-offs**: "integrating the PHY removes
+  external components at the cost of flexibility" persuades more than "30%
+  faster", and sounds like an engineer wrote it.
+- Replace superlatives with **boundaries of applicability**: "this holds in
+  scenario X, not in scenario Y".
+
+If an argument collapses without a number, that argument lacks evidence — cut
+it rather than inventing the number.
+{% endif %}
 {% if data_assets %}
 ## Verified Data Assets (sole permitted source for quantitative claims)
 {% for a in data_assets %}

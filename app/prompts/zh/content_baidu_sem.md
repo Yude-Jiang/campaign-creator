@@ -28,14 +28,25 @@
 {{ content_brief }}
 {% endif %}
 
+{% include "zh/_shared/diagnostic_context.md" %}
+
 ## Audience Intelligence
 
-- **目标受众**: {{ persona.name if persona else '工程师/决策者' }}
+- **目标读者**: {{ persona.name }} ({{ persona.layer }}){% if persona_tech_depth %} · 技术深度 {{ persona_tech_depth }}{% endif %}{% if persona_decision_role %} · 决策角色 {{ persona_decision_role }}{% endif %}
+{% if persona_daily_tasks %}- **日常工作**: {{ persona_daily_tasks | join('; ') }}{% endif %}
 {% if persona_pain_points %}- **关键痛点**: {{ persona_pain_points | join('; ') }}{% endif %}
+{% if persona_decision_criteria %}- **决策标准**（按重要性排序，论证需覆盖前两项）: {{ persona_decision_criteria | join(' > ') }}{% endif %}
 {% if persona_vp_headline %}- **核心价值主张**: {{ persona_vp_headline }}{% endif %}
 {% if persona_vp_argument %}- **价值论述**: {{ persona_vp_argument }}{% endif %}
+{% if persona_vp_proof_points %}- **可用论据**（正文应围绕这些展开，而不是另起炉灶）:
+{% for pt in persona_vp_proof_points %}  - {{ pt }}
+{% endfor %}{% endif %}
+{% if persona_vp_competitor_comparison %}- **竞品对位**:
+{% for k, v in persona_vp_competitor_comparison.items() %}  - {{ k }}: {{ v }}
+{% endfor %}{% endif %}
 {% if persona_objections %}- **预判异议**（论证中预先回应）: {{ persona_objections | join('; ') }}{% endif %}
-{% if persona_search_queries %}- **目标搜索词**: {{ persona_search_queries | join(', ') }}{% endif %}
+{% if persona_trusted_sources %}- **该受众信任的信源**（文风向这些靠拢，不要向公关稿靠拢）: {{ persona_trusted_sources | join('; ') }}{% endif %}
+{% if persona_search_queries %}- **真实搜索词**（标题与小标题应贴近这些说法）: {{ persona_search_queries | join(' / ') }}{% endif %}
 {% if persona_info_channels %}- **信息渠道偏好**: {{ persona_info_channels | join(', ') }}{% endif %}
 
 ## 广告背景
@@ -46,6 +57,18 @@
 - **关键词**: {{ keywords | join(', ') }}
 - **目标页面**: {{ brief.target_page_url }}
 
+{% if not data_assets %}
+### ⚠ 本 campaign 无已核实数据资产
+
+因此**全文不得出现任何具体数字**（性能参数、百分比、周期、比例、认证编号、客户/出货规模）。
+这不代表放弃技术深度——把深度建立在**机理和权衡**上，而不是参数上：
+
+- 用**架构机制**替代参数对比："锁步双核在同一时钟域校验，故障检出不依赖软件轮询" 是技术深度；"检出率 99.9%" 是编造。
+- 用**取舍关系**替代性能排名："集成 PHY 省掉外围器件，代价是灵活性下降" 比 "性能领先 30%" 更有说服力，也更像工程师说的话。
+- 用**适用边界**替代最高级："这个方案在 X 场景成立，在 Y 场景不成立"。
+
+若某个论点离开数字就无法成立，说明该论点缺证据——删掉它，而不是编一个数字。
+{% endif %}
 {% if data_assets %}
 ## 已核实数据资产（量化声明的唯一许可来源）
 {% for a in data_assets %}
