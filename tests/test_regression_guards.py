@@ -1945,3 +1945,79 @@ class TestAllContentTemplatesRender:
         )
         assert "GEO 诊断结论" not in rendered
         assert "GEO Diagnosis (the perception gap" not in rendered
+
+
+class TestFlagshipTemplateCraft:
+    """The Zhihu long-form template is the quality sample. Its defects were:
+    a wall of constraints with zero examples (the main reason output reads
+    generic), a brand-frequency rule a model cannot execute, and a fixed
+    structure that explained basics to expert readers."""
+
+    TEMPLATE = "zh/content_zhihu_long.md"
+
+    BASE = {
+        "brief": {"name": "C", "topic": "ZCU", "industry": "半导体", "products": ["P3E"],
+                  "keywords": ["ZCU"], "target_page_url": "https://e.com",
+                  "competitors_known": ["NXP"]},
+        "persona": {"name": "架构师", "layer": "practitioner"},
+        "anchor_point": "锚点", "question_text": "问题？", "content_brief": "指引",
+        "keywords": ["ZCU"], "data_assets": [], "diagnostic": {},
+        "persona_pain_points": ["痛点"], "persona_vp_headline": "VP",
+        "persona_vp_argument": "论述", "persona_objections": ["异议"],
+        "persona_search_queries": ["词"], "persona_info_channels": ["知乎"],
+        "persona_decision_criteria": ["标准"], "persona_trusted_sources": ["信源"],
+        "persona_daily_tasks": ["任务"], "persona_funnel_stage": "how",
+        "persona_decision_role": "implementer", "persona_vp_proof_points": ["论据"],
+        "persona_vp_competitor_comparison": {"vs NXP": "更集成"},
+    }
+
+    def _render(self, tech_depth="moderate"):
+        from app.services.llm_router import _jinja_env
+
+        return _jinja_env.get_template(self.TEMPLATE).render(
+            **self.BASE, persona_tech_depth=tech_depth
+        )
+
+    def test_has_worked_examples(self):
+        """Constraints without examples produce safe, empty prose."""
+        rendered = self._render()
+        assert "写法示例" in rendered
+        assert rendered.count("❌") >= 4, "each example needs a negative case"
+        assert rendered.count("✅") >= 4, "and a positive one to imitate"
+
+    def test_examples_disclaim_their_placeholder_domain(self):
+        """The templates are de-specialised; examples must not reintroduce a
+        hardcoded industry."""
+        rendered = self._render()
+        assert "不要照搬示例内容" in rendered
+
+    def test_brand_frequency_rule_is_executable(self):
+        """A model cannot count characters, so a per-500-character quota either
+        does nothing or causes awkward over-avoidance."""
+        rendered = self._render()
+        assert "每 500 字出现不超过 2 次" not in rendered
+        assert "首段和结尾段不出现品牌名" in rendered
+
+    @pytest.mark.parametrize("depth,present,absent", [
+        ("deep", "跳过基础概念", "基础概念不能省"),
+        ("shallow", "基础概念不能省", "跳过基础概念"),
+    ])
+    def test_structure_adapts_to_reader_depth(self, depth, present, absent):
+        rendered = self._render(depth)
+        assert present in rendered
+        assert absent not in rendered
+
+    def test_moderate_depth_keeps_the_default_structure(self):
+        rendered = self._render("moderate")
+        assert "跳过基础概念" not in rendered
+        assert "基础概念不能省" not in rendered
+        assert "技术背景" in rendered
+
+    def test_has_a_pre_delivery_checklist(self):
+        rendered = self._render()
+        assert "交付前自检" in rendered
+
+    def test_prompt_stays_within_a_sane_size(self):
+        """A prompt that dwarfs the brief crowds out the diagnosis and persona."""
+        rendered = self._render("deep")
+        assert len(rendered) < 12000, f"prompt grew to {len(rendered)} chars"
