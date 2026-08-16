@@ -396,7 +396,45 @@ async function copyFullPrompt(pi, ci, e) {
   }
 }
 
-async function generateContent(pi, ci) {
+/** Render a channel picker when the stored format names no known template.
+ *  Resolves to the chosen format key, or null if the user dismisses it. */
+function askForFormat(container, detail) {
+  return new Promise(function (resolve) {
+    container.textContent = '';
+    const box = el('div', {
+      style: 'margin-top:8px;padding:12px;background:#FFFBEB;border:1px solid #FDE68A;' +
+             'border-radius:8px;font-size:13px;color:#92400E;',
+    });
+    box.appendChild(el('div', {
+      text: detail.message || '{% if language == "zh" %}无法识别内容格式{% else %}Unrecognized format{% endif %}',
+      style: 'margin-bottom:8px;',
+    }));
+
+    const select = document.createElement('select');
+    select.className = 'form-control form-control-sm';
+    select.style.marginBottom = '8px';
+    (detail.available_formats || []).forEach(function (f) {
+      const opt = document.createElement('option');
+      opt.value = f.key;
+      opt.textContent = '{{ "" if language == "zh" else "" }}' +
+        ('{{ language }}' === 'zh' ? f.label_zh : f.label_en) + ' — ' + f.channel;
+      select.appendChild(opt);
+    });
+    box.appendChild(select);
+
+    const go = el('button', {
+      text: '{% if language == "zh" %}用这个渠道重新生成{% else %}Generate with this channel{% endif %}',
+      className: 'btn btn-primary',
+      style: 'font-size:12px;padding:4px 12px;',
+    });
+    go.addEventListener('click', function () { resolve(select.value); });
+    box.appendChild(go);
+
+    container.appendChild(box);
+  });
+}
+
+async function generateContent(pi, ci, formatOverride) {
   const loading = document.getElementById('llm-loading');
   const btn = document.getElementById('gen-btn-' + pi + '-' + ci);
   const resultDiv = document.getElementById('content-result-' + pi + '-' + ci);
@@ -407,7 +445,9 @@ async function generateContent(pi, ci) {
   try {
     const resp = await apiFetch('/api/campaigns/{{ campaign_id }}/content/generate', {
       method: 'POST',
-      body: JSON.stringify({ priority_index: pi, content_index: ci }),
+      body: JSON.stringify({
+        priority_index: pi, content_index: ci, format_override: formatOverride || null,
+      }),
     });
 
     renderGeneratedContent(
@@ -417,6 +457,14 @@ async function generateContent(pi, ci) {
     );
 
   } catch (err) {
+    if (err.status === 422 && err.detail && err.detail.available_formats) {
+      // The stored format names no channel we can write for. Ask, then retry.
+      if (loading) loading.style.display = 'none';
+      if (btn) { btn.disabled = false; btn.textContent = '⚡ {% if language == "zh" %}生成内容{% else %}Generate Content{% endif %}'; }
+      const chosen = await askForFormat(resultDiv, err.detail);
+      if (chosen) await generateContent(pi, ci, chosen);
+      return;
+    }
     renderGenerationError(
       resultDiv,
       '{% if language == "zh" %}生成失败：{% else %}Generation failed: {% endif %}',

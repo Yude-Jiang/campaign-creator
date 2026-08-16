@@ -74,25 +74,92 @@ def check_channel_fit(persona: dict, channel: str, language: str = "zh") -> str:
     return msg
 
 
+# Values different providers use to mean "I ran out of output budget".
+_TRUNCATED_REASONS = {"length", "max_tokens", "MAX_TOKENS"}
+
+
+def _truncation_warning(finish_reason: str, max_tokens: int, language: str) -> str:
+    """Return a warning if generation stopped because it ran out of tokens.
+
+    Nothing used to check this, so a long-form article that hit the ceiling was
+    returned mid-sentence and presented as finished.
+    """
+    if not finish_reason or finish_reason not in _TRUNCATED_REASONS:
+        return ""
+    if language == "zh":
+        return (
+            f"内容在 {max_tokens} token 上限处被截断，结尾很可能不完整。"
+            "请缩短编辑指引或分段生成后再发布。"
+        )
+    return (
+        f"Generation stopped at the {max_tokens}-token ceiling, so the ending is "
+        "likely cut off. Shorten the brief or generate in sections before publishing."
+    )
+
+
+class UnknownFormatError(ValueError):
+    """The content item's format string matches no known template.
+
+    Previously this fell through to a Zhihu long-form article, so a mislabelled
+    LinkedIn item silently produced a Chinese blog post and only a log line
+    recorded it. Callers should surface the available formats and let the user
+    choose.
+    """
+
+    def __init__(self, format_str: str):
+        self.format_str = format_str
+        super().__init__(f"Unrecognized content format: {format_str!r}")
+
+
+# Output budget per template. A single global 4096 both truncated long-form
+# articles mid-sentence and left ad copy with pointless headroom. These are
+# generous enough that hitting the ceiling means the model ran away, not that
+# the brief was too long.
+FORMAT_MAX_TOKENS: dict[str, int] = {
+    "content_zhihu_long.md": 8192,      # 2000-3500 字 plus markdown structure
+    "content_csdn.md": 8192,
+    "content_wechat.md": 6144,
+    "content_bilibili.md": 6144,        # script + shot notes
+    "content_linkedin.md": 6144,
+    "content_zhihu_qa.md": 4096,
+    "content_email.md": 4096,           # a sequence of several emails
+    "content_baidu_feed.md": 2048,
+    "content_baidu_sem.md": 2048,       # many short variants
+    "content_bing_ads.md": 2048,
+}
+DEFAULT_MAX_TOKENS = 4096
+
+
 # ── Format → Template Mapping ──
 # Ordered by specificity: more specific substrings checked first.
 # Each entry: (match_substrings, template_filename, task_key, needs_keywords)
 
 FORMAT_MAPPING: list[tuple[list[str], str, str, bool]] = [
-    (["zhihu_long", "zhihu_long_form"], "content_zhihu_long.md", "content_organic_chinese", False),
-    (["zhihu_qa", "zhihu_answer", "zhihu_question"], "content_zhihu_qa.md", "content_organic_chinese", False),
-    (["csdn", "technical_blog"], "content_csdn.md", "content_organic_chinese", False),
-    (["bilibili", "b站", "video_script"], "content_bilibili.md", "content_organic_chinese", False),
-    (["wechat", "微信", "wechat_article"], "content_wechat.md", "content_organic_chinese", False),
-    (["email", "邮件", "nurture"], "content_email.md", "content_email", False),
-    (["baidu_sem", "baidu_search", "sem", "paid_search"], "content_baidu_sem.md", "content_paid_baidu_sem", True),
-    (["baidu_feed", "baidu_info", "feed_ad"], "content_baidu_feed.md", "content_paid_baidu_feed", False),
-    (["linkedin"], "content_linkedin.md", "content_organic_english", False),
-    (["bing"], "content_bing_ads.md", "content_paid_bing", True),
-    # Broad zhihu fallback (must be after zhihu_qa and zhihu_long)
-    (["zhihu"], "content_zhihu_long.md", "content_organic_chinese", False),
-    # Ultimate fallback
-    (["*"], "content_zhihu_long.md", "content_organic_chinese", False),
+    # Chinese aliases matter: plan `format` values are LLM-generated free text
+    # and a zh campaign routinely produces labels like "知乎长文". Those used to
+    # match nothing and be rescued by a silent fallback.
+    (["zhihu_long", "zhihu_long_form", "知乎长文", "知乎文章"],
+     "content_zhihu_long.md", "content_organic_chinese", False),
+    (["zhihu_qa", "zhihu_answer", "zhihu_question", "知乎问答", "知乎回答"],
+     "content_zhihu_qa.md", "content_organic_chinese", False),
+    (["csdn", "technical_blog", "技术博客"],
+     "content_csdn.md", "content_organic_chinese", False),
+    (["bilibili", "b站", "video_script", "视频脚本"],
+     "content_bilibili.md", "content_organic_chinese", False),
+    (["wechat", "微信", "wechat_article", "公众号"],
+     "content_wechat.md", "content_organic_chinese", False),
+    (["email", "邮件", "nurture", "培育"],
+     "content_email.md", "content_email", False),
+    (["baidu_sem", "baidu_search", "sem", "paid_search", "百度竞价", "竞价", "搜索广告"],
+     "content_baidu_sem.md", "content_paid_baidu_sem", True),
+    (["baidu_feed", "baidu_info", "feed_ad", "百度信息流", "信息流"],
+     "content_baidu_feed.md", "content_paid_baidu_feed", False),
+    (["linkedin", "领英"],
+     "content_linkedin.md", "content_organic_english", False),
+    (["bing", "必应"],
+     "content_bing_ads.md", "content_paid_bing", True),
+    # Broad zhihu catch — must stay after the two specific zhihu entries.
+    (["zhihu", "知乎"], "content_zhihu_long.md", "content_organic_chinese", False),
 ]
 
 
@@ -189,23 +256,25 @@ def get_available_formats(language: str = "zh") -> list[dict[str, str]]:
         return [o for o in FORMAT_OPTIONS if o["key"] not in _ZH_PLATFORM_KEYS]
 
 
-def _resolve_format(format_str: str) -> dict[str, str | bool]:
+def _resolve_format(format_str: str) -> dict[str, str | bool | int]:
     """Map a free-form format string to a prompt template and task key.
 
-    Uses substring matching against FORMAT_MAPPING.
-    Returns {"template_name": str, "task_key": str, "needs_keywords": bool}
+    Raises UnknownFormatError rather than guessing. The plan's `format` values
+    are LLM-generated free text, so guessing meant a channel mismatch nobody
+    saw until they read the output.
     """
     fmt_lower = format_str.lower().strip()
     for substrings, template, task_key, needs_kw in FORMAT_MAPPING:
-        if "*" in substrings:
-            # Universal fallback
-            logger.warning("Unrecognized format '%s', falling back to %s", format_str, template)
-            return {"template_name": template, "task_key": task_key, "needs_keywords": needs_kw}
         if any(s in fmt_lower for s in substrings):
-            return {"template_name": template, "task_key": task_key, "needs_keywords": needs_kw}
+            return {
+                "template_name": template,
+                "task_key": task_key,
+                "needs_keywords": needs_kw,
+                "max_tokens": FORMAT_MAX_TOKENS.get(template, DEFAULT_MAX_TOKENS),
+            }
 
-    # Should never reach here due to "*" fallback, but be safe
-    return {"template_name": "content_zhihu_long.md", "task_key": "content_organic_chinese", "needs_keywords": False}
+    logger.warning("Unrecognized content format %r — asking the user to choose", format_str)
+    raise UnknownFormatError(format_str)
 
 
 def _find_persona(personas: list[dict], target_id: Any, language: str = "zh") -> dict:
@@ -255,7 +324,8 @@ def _build_variables(
     question_id: str,
     anchor_point: str,
     subject_fallback: str = "",
-) -> tuple[dict[str, Any], str, str, str, bool]:
+    format_override: str | None = None,
+) -> tuple[dict[str, Any], str, str, str, bool, int]:
     """Resolve the template for a content item and build its Jinja2 variables.
 
     Shared by plan-derived and custom content — they differ only in where the
@@ -264,14 +334,17 @@ def _build_variables(
     Returns:
         (variables, format_str, template_name, task_key, needs_keywords)
     """
-    format_str = content_item.get("format", "")
+    # An explicit override wins: it is how the user answers the 422 raised when
+    # the stored format names no channel we can write for.
+    format_str = format_override or content_item.get("format", "")
     if not format_str:
-        raise ValueError("Content item has no format — cannot determine template")
+        raise UnknownFormatError("")
 
     resolved = _resolve_format(format_str)
     template_name = str(resolved["template_name"])
     task_key = str(resolved["task_key"])
     needs_keywords = bool(resolved["needs_keywords"])
+    max_tokens = int(resolved["max_tokens"])
 
     brief = campaign_data.get("brief", {})
     lang = campaign_data.get("language", "zh")
@@ -313,18 +386,19 @@ def _build_variables(
     variables["persona_search_queries"] = p.get("search_queries", [])[:5]
     variables["persona_info_channels"] = p.get("info_channels", [])[:3]
 
-    return variables, format_str, template_name, task_key, needs_keywords
+    return variables, format_str, template_name, task_key, needs_keywords, max_tokens
 
 
 def _build_content_variables(
     campaign_data: dict,
     priority_index: int,
     content_index: int,
-) -> tuple[dict[str, Any], dict, str, str, str, bool]:
+    format_override: str | None = None,
+) -> tuple[dict[str, Any], dict, str, str, str, int]:
     """Build variables for a plan-derived content item.
 
     Returns:
-        (variables, content_item, format_str, template_name, task_key, needs_keywords)
+        (variables, content_item, format_str, template_name, task_key, max_tokens)
     """
     plan = campaign_data.get("plan", {})
     if not plan:
@@ -342,13 +416,14 @@ def _build_content_variables(
         )
 
     content_item = content_plan[content_index]
-    variables, format_str, template_name, task_key, needs_keywords = _build_variables(
+    variables, format_str, template_name, task_key, needs_keywords, max_tokens = _build_variables(
         campaign_data,
         content_item,
         question_id=priority_item.get("question_id", ""),
         anchor_point=priority_item.get("anchor_point", ""),
+        format_override=format_override,
     )
-    return variables, content_item, format_str, template_name, task_key, needs_keywords
+    return variables, content_item, format_str, template_name, task_key, max_tokens
 
 
 def _render_prompt(
@@ -384,6 +459,7 @@ async def _generate(
     template_name: str,
     task_key: str,
     language: str,
+    max_tokens: int = DEFAULT_MAX_TOKENS,
 ) -> dict[str, Any]:
     """Route a content item through the LLM and run the post-generation checks."""
     logger.info(
@@ -402,11 +478,21 @@ async def _generate(
         prompt_name=template_name,
         variables=variables,
         language=language,
-        max_tokens=4096,
+        max_tokens=max_tokens,
     )
+
+    truncated = _truncation_warning(result.get("finish_reason", ""), max_tokens, language)
+    if truncated:
+        logger.warning(
+            "Content generation hit the %d-token ceiling (format=%s, model=%s)",
+            max_tokens, format_str, result["model"],
+        )
 
     return {
         "text": result["text"],
+        "truncated": bool(truncated),
+        "truncation_warning": truncated,
+        "max_tokens": max_tokens,
         "model": result["model"],
         "format": format_str,
         "template": template_name,
@@ -422,14 +508,15 @@ def compose_prompt(
     priority_index: int,
     content_index: int,
     language: str = "zh",
+    format_override: str | None = None,
 ) -> dict[str, Any]:
     """Compose the full prompt for a content item WITHOUT calling the LLM.
 
     Returns the rendered prompt as it would be sent to the model, along with
     metadata about the template and format used.
     """
-    variables, _item, format_str, template_name, _task, _ = \
-        _build_content_variables(campaign_data, priority_index, content_index)
+    variables, _item, format_str, template_name, _task, _budget = \
+        _build_content_variables(campaign_data, priority_index, content_index, format_override)
     return _render_prompt(variables, template_name, format_str, language)
 
 
@@ -438,6 +525,7 @@ async def generate_content(
     priority_index: int,
     content_index: int,
     language: str = "zh",
+    format_override: str | None = None,
 ) -> dict[str, Any]:
     """Generate content for a specific content plan item via LLM.
 
@@ -454,11 +542,11 @@ async def generate_content(
         ValueError: If plan, priority, or content item not found
         RuntimeError: If LLM call fails
     """
-    variables, content_item, format_str, template_name, task_key, _ = \
-        _build_content_variables(campaign_data, priority_index, content_index)
+    variables, content_item, format_str, template_name, task_key, max_tokens = \
+        _build_content_variables(campaign_data, priority_index, content_index, format_override)
     return await _generate(
         campaign_data, variables, content_item,
-        format_str, template_name, task_key, language,
+        format_str, template_name, task_key, language, max_tokens,
     )
 
 
@@ -512,7 +600,8 @@ def resolve_custom_index(custom_items: list[dict], content_key: str | int) -> in
 def build_custom_content_variables(
     campaign_data: dict,
     content_key: str | int,
-) -> tuple[dict[str, Any], dict, str, str, str, bool]:
+    format_override: str | None = None,
+) -> tuple[dict[str, Any], dict, str, str, str, int]:
     """Build variables for a user-added custom content item.
 
     `content_key` is the item's stable id (or a positional index for campaigns
@@ -521,24 +610,26 @@ def build_custom_content_variables(
     custom_content = campaign_data.get("custom_content", [])
     item = custom_content[resolve_custom_index(custom_content, content_key)]
 
-    variables, format_str, template_name, task_key, needs_keywords = _build_variables(
+    variables, format_str, template_name, task_key, needs_keywords, max_tokens = _build_variables(
         campaign_data,
         item,
         question_id=item.get("question_id", ""),
         anchor_point=item.get("anchor_point", "") or item.get("topic", ""),
         subject_fallback=item.get("topic", ""),
+        format_override=format_override,
     )
-    return variables, item, format_str, template_name, task_key, needs_keywords
+    return variables, item, format_str, template_name, task_key, max_tokens
 
 
 def compose_custom_prompt(
     campaign_data: dict,
     content_key: str | int,
     language: str = "zh",
+    format_override: str | None = None,
 ) -> dict[str, Any]:
     """Compose the full prompt for a custom content item without calling the LLM."""
-    variables, _item, format_str, template_name, _task, _ = \
-        build_custom_content_variables(campaign_data, content_key)
+    variables, _item, format_str, template_name, _task, _budget = \
+        build_custom_content_variables(campaign_data, content_key, format_override)
     return _render_prompt(variables, template_name, format_str, language)
 
 
@@ -546,11 +637,12 @@ async def generate_custom_content(
     campaign_data: dict,
     content_key: str | int,
     language: str = "zh",
+    format_override: str | None = None,
 ) -> dict[str, Any]:
     """Generate content for a custom content item via LLM."""
-    variables, item, format_str, template_name, task_key, _ = \
-        build_custom_content_variables(campaign_data, content_key)
+    variables, item, format_str, template_name, task_key, max_tokens = \
+        build_custom_content_variables(campaign_data, content_key, format_override)
     return await _generate(
         campaign_data, variables, item,
-        format_str, template_name, task_key, language,
+        format_str, template_name, task_key, language, max_tokens,
     )

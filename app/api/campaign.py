@@ -558,12 +558,34 @@ def update_data_assets(campaign_id: str, body: DataAssetsUpdateRequest):
     return {"ok": True, "count": len(body.data_assets)}
 
 
+def _unknown_format_error(exc, language: str) -> HTTPException:
+    """Turn an unresolved format into an actionable response.
+
+    422 rather than 400: the request is well-formed, but the campaign's stored
+    format string does not name a channel we can write for. The response
+    carries the valid options so the caller can offer a choice.
+    """
+    from app.services.content_service import get_available_formats
+
+    detail = (
+        f"无法识别内容格式「{exc.format_str}」，请选择一个渠道后重新生成。 | "
+        f"Unrecognized content format '{exc.format_str}' — pick a channel and retry."
+    )
+    return HTTPException(status_code=422, detail={
+        "message": detail,
+        "unknown_format": exc.format_str,
+        "available_formats": get_available_formats(language),
+    })
+
+
 # ── Content Studio (Tab 4) ──
 
 
 class ContentGenerateRequest(BaseModel):
     priority_index: int
     content_index: int
+    # Set when the stored format could not be resolved and the user picked one.
+    format_override: str | None = None
 
 
 @router.post("/campaigns/{campaign_id}/content/compose-prompt")
@@ -577,7 +599,7 @@ def compose_content_prompt(campaign_id: str, body: ContentGenerateRequest):
     if not data:
         raise HTTPException(status_code=404, detail="Campaign 不存在 | Campaign not found")
 
-    from app.services.content_service import compose_prompt
+    from app.services.content_service import UnknownFormatError, compose_prompt
 
     language = data.get("language", "zh")
     try:
@@ -586,7 +608,10 @@ def compose_content_prompt(campaign_id: str, body: ContentGenerateRequest):
             priority_index=body.priority_index,
             content_index=body.content_index,
             language=language,
+            format_override=body.format_override,
         )
+    except UnknownFormatError as e:
+        raise _unknown_format_error(e, language) from e
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e)) from e
 
@@ -612,6 +637,7 @@ async def generate_content(campaign_id: str, body: ContentGenerateRequest):
             raise HTTPException(status_code=404, detail="Campaign 不存在 | Campaign not found")
         language = data.get("language", "zh")
 
+    from app.services.content_service import UnknownFormatError
     from app.services.content_service import generate_content as generate_content_item
 
     # LLM call (no lock held)
@@ -621,7 +647,10 @@ async def generate_content(campaign_id: str, body: ContentGenerateRequest):
             priority_index=body.priority_index,
             content_index=body.content_index,
             language=language,
+            format_override=body.format_override,
         )
+    except UnknownFormatError as e:
+        raise _unknown_format_error(e, language) from e
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e)) from e
     except RuntimeError as e:
@@ -661,6 +690,7 @@ async def generate_content(campaign_id: str, body: ContentGenerateRequest):
         "model": result["model"],
         "format": result.get("format", ""),
         "channel_fit_warning": result.get("channel_fit_warning", ""),
+        "truncation_warning": result.get("truncation_warning", ""),
     }
 
 # ── Custom Content (Tab 4) ──
@@ -682,6 +712,7 @@ class CustomContentRefRequest(BaseModel):
     """
     content_id: str | None = None
     content_index: int | None = Field(default=None, ge=0)
+    format_override: str | None = None
 
     @property
     def key(self) -> str | int:
@@ -759,11 +790,15 @@ def compose_custom_prompt_endpoint(campaign_id: str, body: CustomContentRefReque
     if not data:
         raise HTTPException(status_code=404, detail="Campaign 不存在 | Campaign not found")
 
-    from app.services.content_service import compose_custom_prompt
+    from app.services.content_service import UnknownFormatError, compose_custom_prompt
 
     language = data.get("language", "zh")
     try:
-        result = compose_custom_prompt(data, body.key, language=language)
+        result = compose_custom_prompt(
+            data, body.key, language=language, format_override=body.format_override
+        )
+    except UnknownFormatError as e:
+        raise _unknown_format_error(e, language) from e
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e)) from e
 
@@ -779,11 +814,19 @@ async def generate_custom_content_endpoint(campaign_id: str, body: CustomContent
             raise HTTPException(status_code=404, detail="Campaign 不存在 | Campaign not found")
         language = data.get("language", "zh")
 
-    from app.services.content_service import generate_custom_content, resolve_custom_index
+    from app.services.content_service import (
+        UnknownFormatError,
+        generate_custom_content,
+        resolve_custom_index,
+    )
 
     # LLM call (no lock held — can take 30-120s)
     try:
-        result = await generate_custom_content(data, body.key, language=language)
+        result = await generate_custom_content(
+            data, body.key, language=language, format_override=body.format_override
+        )
+    except UnknownFormatError as e:
+        raise _unknown_format_error(e, language) from e
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e)) from e
     except RuntimeError as e:
@@ -817,6 +860,7 @@ async def generate_custom_content_endpoint(campaign_id: str, body: CustomContent
         "format": result.get("format", ""),
         "channel_fit_warning": result.get("channel_fit_warning", ""),
         "risk_scan": result.get("risk_scan", {}),
+        "truncation_warning": result.get("truncation_warning", ""),
     }
 
 

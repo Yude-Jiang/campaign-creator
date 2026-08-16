@@ -181,6 +181,14 @@ function replaceChildren(container, node) {
 function renderGeneratedContent(container, resp, generatedLabel) {
   container.textContent = '';
 
+  if (resp.truncation_warning) {
+    container.appendChild(el('div', {
+      text: '⚠ ' + resp.truncation_warning,
+      style: 'margin-top:8px;padding:8px 12px;background:#FEF2F2;border:1px solid #FCA5A5;' +
+             'border-radius:6px;font-size:12px;color:#991B1B;',
+    }));
+  }
+
   if (resp.risk_scan && resp.risk_scan.message) {
     container.appendChild(el('div', {
       text: '⚠ ' + resp.risk_scan.message,
@@ -229,8 +237,18 @@ async function apiFetch(url, options = {}) {
     ...options,
   });
   if (!resp.ok) {
-    const err = await resp.json().catch(() => ({ detail: resp.statusText }));
-    throw new Error(err.detail || `API error ${resp.status}`);
+    const body = await resp.json().catch(() => ({ detail: resp.statusText }));
+    const detail = body && body.detail;
+    // `detail` may be a structured object (e.g. an unresolved content format
+    // carrying the list of valid channels). Keep it on the error so callers
+    // can act on it instead of showing "[object Object]".
+    const message = (detail && typeof detail === 'object')
+      ? (detail.message || `API error ${resp.status}`)
+      : (detail || `API error ${resp.status}`);
+    const error = new Error(message);
+    error.status = resp.status;
+    error.detail = detail;
+    throw error;
   }
   return resp.json();
 }

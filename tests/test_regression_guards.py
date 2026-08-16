@@ -1577,3 +1577,181 @@ class TestPersonaExportEndpoints:
         tmpl = (TEMPLATES_DIR / "tab_persona.html").read_text(encoding="utf-8")
         assert "导出全部" in tmpl, "button label should say it exports everything"
         assert "Export All" in tmpl
+
+
+# ═══════════════════════════════════════════════════════════
+# Content Studio: format resolution and truncation
+# ═══════════════════════════════════════════════════════════
+
+
+class TestFormatResolution:
+    """`_resolve_format` used to fall through to a Zhihu long-form article for
+    anything it did not recognise, so a mislabelled item silently produced the
+    wrong channel's content and only a log line recorded it."""
+
+    @pytest.mark.parametrize("fmt,template", [
+        ("zhihu_long", "content_zhihu_long.md"),
+        ("知乎长文", "content_zhihu_long.md"),
+        ("知乎问答", "content_zhihu_qa.md"),
+        ("技术博客", "content_csdn.md"),
+        ("公众号", "content_wechat.md"),
+        ("视频脚本", "content_bilibili.md"),
+        ("百度竞价", "content_baidu_sem.md"),
+        ("百度信息流", "content_baidu_feed.md"),
+        ("领英", "content_linkedin.md"),
+        ("必应", "content_bing_ads.md"),
+    ])
+    def test_chinese_and_english_labels_both_resolve(self, fmt, template):
+        """Plan `format` values are LLM free text; a zh campaign emits zh labels."""
+        from app.services.content_service import _resolve_format
+
+        assert _resolve_format(fmt)["template_name"] == template
+
+    @pytest.mark.parametrize("fmt", ["小红书", "podcast", "", "   ", "抖音短视频"])
+    def test_unknown_format_raises_instead_of_guessing(self, fmt):
+        from app.services.content_service import UnknownFormatError, _resolve_format
+
+        with pytest.raises(UnknownFormatError):
+            _resolve_format(fmt)
+
+    def test_no_universal_fallback_entry_remains(self):
+        from app.services.content_service import FORMAT_MAPPING
+
+        assert not any("*" in subs for subs, *_ in FORMAT_MAPPING), (
+            "the silent catch-all fallback is back"
+        )
+
+    def test_every_mapped_template_has_a_token_budget(self):
+        from app.services.content_service import FORMAT_MAPPING, FORMAT_MAX_TOKENS
+
+        for _subs, template, *_ in FORMAT_MAPPING:
+            assert template in FORMAT_MAX_TOKENS, (
+                f"{template} has no output budget, so it silently gets the "
+                f"generic default"
+            )
+
+    def test_long_form_gets_more_budget_than_ad_copy(self):
+        from app.services.content_service import FORMAT_MAX_TOKENS
+
+        assert FORMAT_MAX_TOKENS["content_zhihu_long.md"] > 4096, (
+            "a 2000-3500 character article does not fit in the old 4096 default"
+        )
+        assert FORMAT_MAX_TOKENS["content_baidu_sem.md"] < 4096
+
+
+class TestTruncationDetection:
+    """No provider inspected finish_reason, so an article that ran out of
+    output budget was returned mid-sentence and presented as finished."""
+
+    CAMPAIGN = {
+        "language": "zh",
+        "brief": {"name": "C", "topic": "ZCU", "keywords": ["ZCU"], "products": ["P3E"]},
+        "personas": [{"id": "p1", "name": "架构师", "layer": "practitioner"}],
+        "plan": {"priorities": [{
+            "question_id": "q1", "anchor_point": "集成度",
+            "content_plan": [{"format": "zhihu_long", "channel": "知乎",
+                              "target_persona_id": "p1"}],
+        }]},
+    }
+
+    def _run(self, monkeypatch, finish_reason: str, fmt: str = "zhihu_long"):
+        import asyncio
+        import copy
+
+        from app.services import content_service as cs
+
+        seen = {}
+
+        async def fake(**kw):
+            seen["max_tokens"] = kw.get("max_tokens")
+            return {"text": "写到一半就", "model": "deepseek",
+                    "finish_reason": finish_reason,
+                    "grounding_sources": [], "grounding_queries": []}
+
+        monkeypatch.setattr(cs.llm_router, "route_and_generate", fake)
+        campaign = copy.deepcopy(self.CAMPAIGN)
+        campaign["plan"]["priorities"][0]["content_plan"][0]["format"] = fmt
+        result = asyncio.run(cs.generate_content(campaign, 0, 0, language="zh"))
+        return result, seen
+
+    def test_length_stop_is_reported(self, monkeypatch):
+        result, _ = self._run(monkeypatch, "length")
+        assert result["truncated"] is True
+        assert "截断" in result["truncation_warning"]
+
+    def test_normal_stop_is_not_flagged(self, monkeypatch):
+        result, _ = self._run(monkeypatch, "stop")
+        assert result["truncated"] is False
+        assert result["truncation_warning"] == ""
+
+    def test_gemini_max_tokens_spelling_is_recognised(self, monkeypatch):
+        result, _ = self._run(monkeypatch, "MAX_TOKENS")
+        assert result["truncated"] is True
+
+    def test_budget_varies_by_format(self, monkeypatch):
+        _, long_form = self._run(monkeypatch, "stop", "zhihu_long")
+        _, ad_copy = self._run(monkeypatch, "stop", "baidu_sem")
+        assert long_form["max_tokens"] > ad_copy["max_tokens"]
+        assert long_form["max_tokens"] == 8192
+
+
+class TestUnknownFormatRecovery:
+    """An unresolved format should be an actionable prompt, not a dead end."""
+
+    def _client(self, tmp_path, monkeypatch):
+        import app.utils.file_handler as fh
+        from app.main import app as fastapi_app
+
+        monkeypatch.setattr(fh, "CAMPAIGNS_DIR", tmp_path / "campaigns")
+        return TestClient(fastapi_app)
+
+    def _seeded(self, client, fmt: str) -> str:
+        cid = client.post("/api/campaigns", json={
+            "brief": {"name": "fmt", "topic": "ZCU", "language": "zh"},
+        }).json()["campaign_id"]
+        client.put(f"/api/campaigns/{cid}", json={
+            "campaign_id": cid, "language": "zh",
+            "brief": {"name": "fmt", "topic": "ZCU", "keywords": ["ZCU"]},
+            "personas": [{"id": "p1", "name": "架构师", "layer": "practitioner"}],
+            "plan": {"priorities": [{
+                "question_id": "q1", "anchor_point": "集成度",
+                "content_plan": [{"format": fmt, "channel": "x",
+                                  "target_persona_id": "p1"}],
+            }]},
+        })
+        return cid
+
+    def test_422_carries_the_available_formats(self, tmp_path, monkeypatch):
+        client = self._client(tmp_path, monkeypatch)
+        cid = self._seeded(client, "小红书种草")
+
+        resp = client.post(f"/api/campaigns/{cid}/content/compose-prompt",
+                           json={"priority_index": 0, "content_index": 0})
+        assert resp.status_code == 422, resp.text
+        detail = resp.json()["detail"]
+        assert detail["unknown_format"] == "小红书种草"
+        assert detail["available_formats"], "the caller needs the valid options"
+        assert all("key" in f and "channel" in f for f in detail["available_formats"])
+
+    def test_override_recovers(self, tmp_path, monkeypatch):
+        client = self._client(tmp_path, monkeypatch)
+        cid = self._seeded(client, "小红书种草")
+
+        resp = client.post(f"/api/campaigns/{cid}/content/compose-prompt",
+                           json={"priority_index": 0, "content_index": 0,
+                                 "format_override": "zhihu_long"})
+        assert resp.status_code == 200, resp.text
+        assert resp.json()["template"] == "content_zhihu_long.md"
+
+    def test_client_can_read_structured_errors(self):
+        """apiFetch flattened detail to a string, which would have shown
+        '[object Object]' instead of offering the picker."""
+        js = (STATIC_DIR / "js" / "app.js").read_text(encoding="utf-8")
+        assert "error.detail = detail" in js
+        assert "error.status = resp.status" in js
+
+    def test_studio_offers_a_picker_on_422(self):
+        tmpl = (TEMPLATES_DIR / "tab_content_studio.html").read_text(encoding="utf-8")
+        assert "askForFormat" in tmpl
+        assert "available_formats" in tmpl
+        assert "format_override" in tmpl

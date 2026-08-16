@@ -217,6 +217,7 @@ class LLMRouter:
                     "grounding_used": bool(grounding_sources or grounding_queries),
                     "grounding_sources": grounding_sources,
                     "grounding_queries": grounding_queries,
+                    "finish_reason": meta.get("finish_reason", ""),
                 }
             except Exception as exc:
                 last_error = exc

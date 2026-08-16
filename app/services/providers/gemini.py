@@ -151,10 +151,10 @@ class GeminiProvider(BaseProvider):
         max_tokens: int = 4096,
         temperature: float = 0.7,
         grounding: bool = False,
-    ) -> tuple[str, list[dict], list[str]]:
+    ) -> tuple[str, list[dict], list[str], str]:
         """Generate via Vertex AI REST API using gcloud access token.
 
-        Returns (text, grounding_sources, grounding_queries).
+        Returns (text, grounding_sources, grounding_queries, finish_reason).
         """
         token = self._get_gcloud_token()
         if not token:
@@ -187,10 +187,13 @@ class GeminiProvider(BaseProvider):
             ctx = ssl.create_default_context()
             resp = urllib.request.urlopen(req, context=ctx, timeout=120)
             result = json.loads(resp.read())
-            text = result["candidates"][0]["content"]["parts"][0]["text"]
+            candidate = result["candidates"][0]
+            text = candidate["content"]["parts"][0]["text"]
+            # MAX_TOKENS here means the answer was cut off, not that it finished.
+            finish_reason = candidate.get("finishReason", "")
             sources = _extract_grounding_sources_rest(result) if grounding else []
             queries = _extract_grounding_queries_rest(result) if grounding else []
-            return text, sources, queries
+            return text, sources, queries, finish_reason
         except Exception as e:
             logger.error("Vertex AI REST call failed: %s", e)
             if hasattr(e, "read"):
@@ -204,10 +207,10 @@ class GeminiProvider(BaseProvider):
         max_tokens: int = 4096,
         temperature: float = 0.7,
         grounding: bool = False,
-    ) -> tuple[str, list[dict], list[str]]:
+    ) -> tuple[str, list[dict], list[str], str]:
         """Generate via Google AI Studio API key.
 
-        Returns (text, grounding_sources, grounding_queries).
+        Returns (text, grounding_sources, grounding_queries, finish_reason).
         """
         from google import genai
         from google.genai.types import GenerateContentConfig, GoogleSearch, Tool
@@ -227,7 +230,9 @@ class GeminiProvider(BaseProvider):
         )
         sources = _extract_grounding_sources_sdk(resp) if grounding else []
         queries = _extract_grounding_queries_sdk(resp) if grounding else []
-        return resp.text, sources, queries
+        candidate = resp.candidates[0] if resp.candidates else None
+        finish_reason = str(getattr(candidate, "finish_reason", "") or "") if candidate else ""
+        return resp.text, sources, queries, finish_reason
 
     def _generate_sync(
         self,
@@ -237,10 +242,10 @@ class GeminiProvider(BaseProvider):
         temperature: float = 0.7,
         grounding: bool = False,
         **kwargs: Any,
-    ) -> tuple[str, list[dict], list[str]]:
+    ) -> tuple[str, list[dict], list[str], str]:
         """Pick the best available backend, with fallback chain.
 
-        Returns (text, grounding_sources, grounding_queries).
+        Returns (text, grounding_sources, grounding_queries, finish_reason).
         """
         # Prefer Vertex AI via gcloud REST (most reliable in this environment)
         if settings.google_cloud_project:
@@ -291,7 +296,7 @@ class GeminiProvider(BaseProvider):
         actually performed a search.
         """
         try:
-            text, sources, queries = await asyncio.to_thread(
+            text, sources, queries, finish_reason = await asyncio.to_thread(
                 self._generate_sync,
                 prompt=prompt,
                 system_prompt=system_prompt,
@@ -305,6 +310,8 @@ class GeminiProvider(BaseProvider):
                 result["grounding_sources"] = sources
             if queries:
                 result["grounding_queries"] = queries
+            if finish_reason:
+                result["finish_reason"] = finish_reason
             return result
         except Exception as e:
             logger.error("Gemini API error: %s", e)
