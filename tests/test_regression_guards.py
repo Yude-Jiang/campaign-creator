@@ -225,13 +225,9 @@ def _build_page_context(template_name: str, **extra) -> dict:
 
     extra.setdefault("tabs", build_tabs([False] * EXPECTED_TAB_COUNT))
     extra.setdefault("active_tab", 3)
-    return page_context(
-        _mock_request(),
-        language="zh",
-        campaign_id="test-campaign",
-        campaign=MOCK_CAMPAIGN,
-        **extra,
-    )
+    extra.setdefault("campaign", MOCK_CAMPAIGN)
+    extra.setdefault("campaign_id", "test-campaign")
+    return page_context(_mock_request(), language="zh", **extra)
 
 
 # ═══════════════════════════════════════════════════════════
@@ -1049,3 +1045,176 @@ class TestDockerfilePortHandling:
         dockerfile = (ROOT / "Dockerfile").read_text(encoding="utf-8")
         assert "EXPOSE $PORT" not in dockerfile, "EXPOSE needs a literal port"
         assert "${PORT:-" in dockerfile, "CMD must default PORT for local runs"
+
+
+# ═══════════════════════════════════════════════════════════
+# Bug class 5: Overstated provenance
+# ═══════════════════════════════════════════════════════════
+
+
+class TestGroundingHonesty:
+    """`grounding_used` reported whether a search tool was *offered*, not
+    whether the model searched, and the persona phase's citations were dropped
+    on the floor — so personas looked as well-sourced as questions."""
+
+    def test_grounding_used_requires_actual_search_evidence(self):
+        """Offering the tool is not evidence; queries or sources are."""
+        from app.services.llm_router import LLMRouter
+
+        src = (APP_DIR / "services" / "llm_router.py").read_text(encoding="utf-8")
+        assert '"grounding_used": bool(grounding_sources or grounding_queries)' in src, (
+            "grounding_used must derive from real search evidence, not the request flag"
+        )
+        assert '"grounding_requested": use_grounding' in src, (
+            "the request flag should still be reported, under its own name"
+        )
+        assert hasattr(LLMRouter, "route_and_generate")
+
+    def test_gemini_extracts_the_queries_actually_issued(self):
+        from app.services.providers.gemini import (
+            _extract_grounding_queries_rest,
+            _extract_grounding_sources_rest,
+        )
+
+        searched = {"candidates": [{"groundingMetadata": {
+            "webSearchQueries": ["ZCU 选型", ""],
+            "groundingChunks": [{"web": {"uri": "https://a.com", "title": "A"}}],
+        }}]}
+        assert _extract_grounding_queries_rest(searched) == ["ZCU 选型"]
+        assert _extract_grounding_sources_rest(searched) == [
+            {"url": "https://a.com", "title": "A"}
+        ]
+
+        # Tool attached, never invoked — the case that used to read as grounded.
+        untouched = {"candidates": [{"content": {"parts": [{"text": "..."}]}}]}
+        assert _extract_grounding_queries_rest(untouched) == []
+        assert _extract_grounding_sources_rest(untouched) == []
+
+    def test_persona_phase_sources_are_not_discarded(self):
+        """Phase 1's citations were overwritten by Phase 3's."""
+        src = (APP_DIR / "services" / "persona_service.py").read_text(encoding="utf-8")
+        assert "persona_grounding" in src and "question_grounding" in src
+        assert 'grounding_sources = p3_result.get("grounding_sources", [])' not in src, (
+            "persona-phase grounding sources are being dropped again"
+        )
+
+    @pytest.mark.parametrize("state,expected,forbidden", [
+        (
+            {"requested": True, "used": True,
+             "sources": [{"url": "https://z.com/1", "title": "SRC"}], "queries": ["q"]},
+            "Google 搜索引用来源",
+            ["未实际发起检索", "本次未启用 Google 搜索验证", "未匹配到高质量引用来源"],
+        ),
+        (
+            {"requested": True, "used": True, "sources": [], "queries": ["冷门词"]},
+            "未匹配到高质量引用来源",
+            ["未实际发起检索", "本次未启用 Google 搜索验证"],
+        ),
+        (
+            {"requested": True, "used": False, "sources": [], "queries": []},
+            "未实际发起检索",
+            ["本次未启用 Google 搜索验证", "Google 搜索引用来源"],
+        ),
+        (
+            {"requested": False, "used": False, "sources": [], "queries": []},
+            "本次未启用 Google 搜索验证",
+            ["未实际发起检索", "Google 搜索引用来源"],
+        ),
+    ])
+    def test_persona_disclosure_states_are_mutually_exclusive(self, state, expected, forbidden):
+        from app.api.pages import templates as starlette_templates
+
+        campaign = dict(MOCK_CAMPAIGN)
+        campaign["persona_grounding"] = state
+        campaign["question_grounding"] = {
+            "requested": False, "used": False, "sources": [], "queries": [],
+        }
+        ctx = _build_page_context("tab_persona.html", campaign=campaign, active_tab=1)
+        html = starlette_templates.get_template("tab_persona.html").render(ctx)
+
+        # Isolate the persona section — the questions section has its own block.
+        block = html[html.index("目标 Persona（"):html.index('<div id="persona-container">')]
+        assert expected in block, f"expected {expected!r} in the persona disclosure"
+        for f in forbidden:
+            assert f not in block, f"persona disclosure should not also say {f!r}"
+
+    def test_persona_disclosure_disclaims_the_ungrounded_vp_step(self):
+        """VPs come from a separate, ungrounded model — the citation list must
+        not appear to cover them."""
+        from app.api.pages import templates as starlette_templates
+
+        campaign = dict(MOCK_CAMPAIGN)
+        campaign["persona_grounding"] = {
+            "requested": True, "used": True,
+            "sources": [{"url": "https://z.com/1", "title": "S"}], "queries": ["q"],
+        }
+        ctx = _build_page_context("tab_persona.html", campaign=campaign, active_tab=1)
+        html = starlette_templates.get_template("tab_persona.html").render(ctx)
+        assert "不在此来源范围内" in html
+
+    def test_old_campaigns_still_render(self):
+        """Campaigns generated before per-phase tracking have neither new key."""
+        from app.api.pages import templates as starlette_templates
+
+        campaign = dict(MOCK_CAMPAIGN)
+        campaign.pop("persona_grounding", None)
+        campaign.pop("question_grounding", None)
+        campaign["grounding_used"] = True
+        campaign["grounding_sources"] = [{"url": "https://old.com", "title": "LEGACY"}]
+        ctx = _build_page_context("tab_persona.html", campaign=campaign, active_tab=1)
+        html = starlette_templates.get_template("tab_persona.html").render(ctx)
+        assert "LEGACY" in html
+
+
+class TestVpPromptDoesNotDemandFabrication:
+    """Rules 2/3 ordered the model to cite specific parameters and name
+    competitor comparisons, while rule 5 forbade unsourced numbers — and with
+    no data assets the whitelist section was not even rendered, so rule 5
+    pointed at nothing."""
+
+    BRIEF = {"name": "C", "topic": "ZCU", "industry": "半导体",
+             "products": ["P3E"], "keywords": ["ZCU"], "competitors_known": ["NXP S32G"]}
+    PERSONAS = [{"id": "p1", "name": "架构师", "layer": "practitioner",
+                 "tech_depth": "deep", "decision_weight": "high",
+                 "pain_points": ["x"], "objections": [], "decision_criteria": [],
+                 "info_channels": ["CSDN"]}]
+
+    def _render(self, language, data_assets):
+        from app.services.llm_router import _jinja_env
+
+        return _jinja_env.get_template(f"{language}/vp_generation.md").render(
+            brief=self.BRIEF, personas=self.PERSONAS, data_assets=data_assets
+        )
+
+    @pytest.mark.parametrize("language,marker", [
+        ("zh", "已核实数据资产：无"),
+        ("en", "Verified Data Assets: none"),
+    ])
+    def test_no_assets_renders_an_explicit_prohibition(self, language, marker):
+        prompt = self._render(language, [])
+        assert marker in prompt, (
+            "with no data assets the prompt must say so explicitly, instead of "
+            "silently omitting the section that rule 5 refers to"
+        )
+
+    @pytest.mark.parametrize("language", ["zh", "en"])
+    def test_assets_render_as_a_whitelist(self, language):
+        prompt = self._render(language, [
+            {"claim": "P3E integrates 6x Cortex-R52", "source": "DS14123 p.12"},
+        ])
+        assert "DS14123 p.12" in prompt
+        assert "已核实数据资产：无" not in prompt
+        assert "Verified Data Assets: none" not in prompt
+
+    def test_specificity_rule_is_scoped_to_mechanisms_when_unsourced(self):
+        """Rule 2 must stop demanding parameters when there is nothing to cite."""
+        zh = self._render("zh", [])
+        assert "不是具体的数字" in zh
+        en = self._render("en", [])
+        assert "not specific numbers" in en
+
+    def test_competitor_comparison_rule_is_scoped_when_unsourced(self):
+        zh = self._render("zh", [])
+        assert "定性判断" in zh
+        en = self._render("en", [])
+        assert "stated qualitatively" in en

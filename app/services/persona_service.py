@@ -108,12 +108,28 @@ async def generate_personas_and_questions(
       2. VP Generation — differentiated value propositions per persona (DeepSeek)
       3. Question Discovery — benchmark questions with rich metadata (Gemini)
 
-    Returns a dict with keys: personas, questions, model, grounding_used
+    Returns a dict with keys: personas, questions, model,
+    persona_grounding, question_grounding (each phase's grounding is
+    tracked separately — see _grounding_record).
     """
     brief = campaign_data.get("brief", {})
 
     models_used = []
-    grounding_used = False
+
+    def _grounding_record(result: dict) -> dict:
+        """Capture what grounding actually happened for one phase.
+
+        Each phase is recorded separately: persona claims and question claims
+        are sourced independently, and collapsing them into one flag made the
+        personas look as well-sourced as the questions.
+        """
+        return {
+            "model": result.get("model", ""),
+            "requested": bool(result.get("grounding_requested")),
+            "used": bool(result.get("grounding_used")),
+            "sources": result.get("grounding_sources", []),
+            "queries": result.get("grounding_queries", []),
+        }
 
     # ── Phase 1: Persona Discovery ──
     logger.info("Phase 1: Persona Discovery (Gemini + grounding)")
@@ -140,8 +156,13 @@ async def generate_personas_and_questions(
     p1_parsed = safe_parse_json(p1_result["text"])
     personas = p1_parsed.get("personas", [])
     models_used.append(f"personas:{p1_result['model']}")
-    if p1_result.get("grounding_used"):
-        grounding_used = True
+    persona_grounding = _grounding_record(p1_result)
+    logger.info(
+        "Phase 1 grounding: requested=%s used=%s sources=%d",
+        persona_grounding["requested"],
+        persona_grounding["used"],
+        len(persona_grounding["sources"]),
+    )
 
     if not personas:
         logger.warning("Phase 1 returned no personas — using fallback")
@@ -208,9 +229,13 @@ async def generate_personas_and_questions(
     p3_parsed = safe_parse_json(p3_result["text"])
     questions = p3_parsed.get("questions", [])
     models_used.append(f"questions:{p3_result['model']}")
-    if p3_result.get("grounding_used"):
-        grounding_used = True
-    grounding_sources = p3_result.get("grounding_sources", [])
+    question_grounding = _grounding_record(p3_result)
+    logger.info(
+        "Phase 3 grounding: requested=%s used=%s sources=%d",
+        question_grounding["requested"],
+        question_grounding["used"],
+        len(question_grounding["sources"]),
+    )
 
     # Ensure defaults on all questions
     questions = [_ensure_question_defaults(q) for q in questions]
@@ -229,7 +254,11 @@ async def generate_personas_and_questions(
         "value_propositions": value_props,
         "questions": questions,
         "model": " + ".join(models_used),
-        "grounding_used": grounding_used,
-        "grounding_sources": grounding_sources,
+        "persona_grounding": persona_grounding,
+        "question_grounding": question_grounding,
+        # Legacy keys — question-scoped, as they have always been. Kept so
+        # campaigns generated before per-phase tracking still render.
+        "grounding_used": question_grounding["used"],
+        "grounding_sources": question_grounding["sources"],
         "master_persona_snapshot": master_snapshot,
     }

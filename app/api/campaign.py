@@ -260,6 +260,8 @@ async def generate_persona(campaign_id: str):
         data["questions"] = result.get("questions", [])
         data["grounding_sources"] = result.get("grounding_sources", [])
         data["grounding_used"] = result.get("grounding_used", False)
+        data["persona_grounding"] = result.get("persona_grounding", {})
+        data["question_grounding"] = result.get("question_grounding", {})
         if result.get("master_persona_snapshot"):
             data["master_persona_snapshot"] = result["master_persona_snapshot"]
         data["updated_at"] = datetime.now().isoformat()
@@ -273,6 +275,8 @@ async def generate_persona(campaign_id: str):
         "model": result.get("model", ""),
         "grounding_used": result.get("grounding_used", False),
         "grounding_sources": result.get("grounding_sources", []),
+        "persona_grounding": result.get("persona_grounding", {}),
+        "question_grounding": result.get("question_grounding", {}),
     }
 
 

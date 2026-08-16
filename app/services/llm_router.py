@@ -202,13 +202,21 @@ class LLMRouter:
                     temperature=temperature,
                 )
                 text = result["text"] if isinstance(result, dict) else result
-                grounding_sources = result.get("grounding_sources", []) if isinstance(result, dict) else []
+                meta = result if isinstance(result, dict) else {}
+                grounding_sources = meta.get("grounding_sources", [])
+                grounding_queries = meta.get("grounding_queries", [])
+                # `grounding_used` must mean "the model actually searched", not
+                # "we offered it a search tool". A response can come back with
+                # the tool attached and never invoked; reporting that as
+                # grounded would overstate how well-sourced the output is.
                 return {
                     "text": text,
                     "model": candidate,
                     "task": task,
-                    "grounding_used": use_grounding,
+                    "grounding_requested": use_grounding,
+                    "grounding_used": bool(grounding_sources or grounding_queries),
                     "grounding_sources": grounding_sources,
+                    "grounding_queries": grounding_queries,
                 }
             except Exception as exc:
                 last_error = exc
