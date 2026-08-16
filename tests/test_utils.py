@@ -1,6 +1,7 @@
 """Tests for utility functions — file_handler validation, slugify, etc."""
 
 import pytest
+
 from app.utils.file_handler import validate_campaign_id
 
 

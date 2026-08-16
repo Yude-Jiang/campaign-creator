@@ -1,4 +1,4 @@
-from app.models.campaign import CampaignBrief, Campaign
+from app.models.campaign import Campaign, CampaignBrief
 from app.models.persona import Persona
 from app.models.question import BenchmarkQuestion, QuestionCategory
 

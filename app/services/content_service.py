@@ -101,16 +101,76 @@ FORMAT_MAPPING: list[tuple[list[str], str, str, bool]] = [
 # zh_platforms / en_platforms used by get_available_formats() for language filtering.
 
 FORMAT_OPTIONS: list[dict[str, str]] = [
-    {"key": "zhihu_long", "label_zh": "知乎长文", "label_en": "Zhihu Long-Form", "channel": "知乎", "channel_type": "organic"},
-    {"key": "zhihu_qa", "label_zh": "知乎问答", "label_en": "Zhihu Q&A", "channel": "知乎", "channel_type": "organic"},
-    {"key": "csdn", "label_zh": "CSDN 技术博客", "label_en": "CSDN Technical Blog", "channel": "CSDN", "channel_type": "organic"},
-    {"key": "bilibili", "label_zh": "B站视频脚本", "label_en": "Bilibili Video Script", "channel": "B站", "channel_type": "organic"},
-    {"key": "wechat", "label_zh": "微信公众号", "label_en": "WeChat Article", "channel": "微信", "channel_type": "organic"},
-    {"key": "email", "label_zh": "邮件培育序列", "label_en": "Email Nurture Series", "channel": "邮件", "channel_type": "organic"},
-    {"key": "baidu_sem", "label_zh": "百度竞价广告", "label_en": "Baidu SEM", "channel": "百度竞价", "channel_type": "paid"},
-    {"key": "baidu_feed", "label_zh": "百度信息流广告", "label_en": "Baidu Feed Ad", "channel": "百度信息流", "channel_type": "paid"},
-    {"key": "linkedin", "label_zh": "LinkedIn", "label_en": "LinkedIn", "channel": "LinkedIn", "channel_type": "organic"},
-    {"key": "bing", "label_zh": "Bing Ads", "label_en": "Bing Ads", "channel": "Bing", "channel_type": "paid"},
+    {
+        "key": "zhihu_long",
+        "label_zh": "知乎长文",
+        "label_en": "Zhihu Long-Form",
+        "channel": "知乎",
+        "channel_type": "organic",
+    },
+    {
+        "key": "zhihu_qa",
+        "label_zh": "知乎问答",
+        "label_en": "Zhihu Q&A",
+        "channel": "知乎",
+        "channel_type": "organic",
+    },
+    {
+        "key": "csdn",
+        "label_zh": "CSDN 技术博客",
+        "label_en": "CSDN Technical Blog",
+        "channel": "CSDN",
+        "channel_type": "organic",
+    },
+    {
+        "key": "bilibili",
+        "label_zh": "B站视频脚本",
+        "label_en": "Bilibili Video Script",
+        "channel": "B站",
+        "channel_type": "organic",
+    },
+    {
+        "key": "wechat",
+        "label_zh": "微信公众号",
+        "label_en": "WeChat Article",
+        "channel": "微信",
+        "channel_type": "organic",
+    },
+    {
+        "key": "email",
+        "label_zh": "邮件培育序列",
+        "label_en": "Email Nurture Series",
+        "channel": "邮件",
+        "channel_type": "organic",
+    },
+    {
+        "key": "baidu_sem",
+        "label_zh": "百度竞价广告",
+        "label_en": "Baidu SEM",
+        "channel": "百度竞价",
+        "channel_type": "paid",
+    },
+    {
+        "key": "baidu_feed",
+        "label_zh": "百度信息流广告",
+        "label_en": "Baidu Feed Ad",
+        "channel": "百度信息流",
+        "channel_type": "paid",
+    },
+    {
+        "key": "linkedin",
+        "label_zh": "LinkedIn",
+        "label_en": "LinkedIn",
+        "channel": "LinkedIn",
+        "channel_type": "organic",
+    },
+    {
+        "key": "bing",
+        "label_zh": "Bing Ads",
+        "label_en": "Bing Ads",
+        "channel": "Bing",
+        "channel_type": "paid",
+    },
 ]
 
 _ZH_PLATFORM_KEYS = {"zhihu_long", "zhihu_qa", "csdn", "bilibili", "wechat", "baidu_sem", "baidu_feed"}
@@ -188,12 +248,80 @@ def _find_question(questions: list[dict], question_id: str) -> str:
     return ""
 
 
+def _build_variables(
+    campaign_data: dict,
+    content_item: dict,
+    *,
+    question_id: str,
+    anchor_point: str,
+    subject_fallback: str = "",
+) -> tuple[dict[str, Any], str, str, str, bool]:
+    """Resolve the template for a content item and build its Jinja2 variables.
+
+    Shared by plan-derived and custom content — they differ only in where the
+    item, question id, and anchor come from.
+
+    Returns:
+        (variables, format_str, template_name, task_key, needs_keywords)
+    """
+    format_str = content_item.get("format", "")
+    if not format_str:
+        raise ValueError("Content item has no format — cannot determine template")
+
+    resolved = _resolve_format(format_str)
+    template_name = str(resolved["template_name"])
+    task_key = str(resolved["task_key"])
+    needs_keywords = bool(resolved["needs_keywords"])
+
+    brief = campaign_data.get("brief", {})
+    lang = campaign_data.get("language", "zh")
+
+    persona = _find_persona(
+        campaign_data.get("personas", []),
+        content_item.get("target_persona_id", ""),
+        language=lang,
+    )
+
+    # Question text is the subject matter; fall back to the anchor when the
+    # question is missing (custom items may have no question at all).
+    question_text = _find_question(campaign_data.get("questions", []), question_id)
+    if not question_text:
+        question_text = subject_fallback or anchor_point
+
+    variables: dict[str, Any] = {
+        "brief": brief,
+        "persona": persona,
+        "anchor_point": anchor_point,
+        "question_text": question_text,
+    }
+    if needs_keywords:
+        variables["keywords"] = brief.get("keywords", [])
+
+    variables["content_brief"] = (
+        content_item.get("content_brief", "")
+        or content_item.get("llm_prompt", "")       # legacy plans
+        or content_item.get("topic", "")            # custom items
+    )
+    variables["data_assets"] = campaign_data.get("data_assets", [])
+
+    # Persona-derived context, sliced to keep the prompt from bloating.
+    p = persona or {}
+    variables["persona_pain_points"] = p.get("pain_points", [])[:3]
+    variables["persona_vp_headline"] = p.get("vp_headline", "")
+    variables["persona_vp_argument"] = p.get("vp_argument", "")
+    variables["persona_objections"] = p.get("objections", [])[:2]
+    variables["persona_search_queries"] = p.get("search_queries", [])[:5]
+    variables["persona_info_channels"] = p.get("info_channels", [])[:3]
+
+    return variables, format_str, template_name, task_key, needs_keywords
+
+
 def _build_content_variables(
     campaign_data: dict,
     priority_index: int,
     content_index: int,
 ) -> tuple[dict[str, Any], dict, str, str, str, bool]:
-    """Resolve format, build variables, and return everything needed to render the prompt.
+    """Build variables for a plan-derived content item.
 
     Returns:
         (variables, content_item, format_str, template_name, task_key, needs_keywords)
@@ -214,62 +342,79 @@ def _build_content_variables(
         )
 
     content_item = content_plan[content_index]
-    format_str = content_item.get("format", "")
-    if not format_str:
-        raise ValueError("Content item has no format — cannot determine template")
-
-    # ── Resolve format to template ──
-    resolved = _resolve_format(format_str)
-    template_name = str(resolved["template_name"])
-    task_key = str(resolved["task_key"])
-    needs_keywords = bool(resolved["needs_keywords"])
-
-    # ── Gather template variables ──
-    brief = campaign_data.get("brief", {})
-
-    # Persona lookup
-    personas = campaign_data.get("personas", [])
-    target_id = content_item.get("target_persona_id", "")
-    lang = campaign_data.get("language", "zh")
-    persona = _find_persona(personas, target_id, language=lang)
-
-    # Question lookup
-    questions = campaign_data.get("questions", [])
-    question_id = priority_item.get("question_id", "")
-    question_text = _find_question(questions, question_id)
-    if not question_text:
-        # Fallback: use anchor_point as subject matter
-        question_text = priority_item.get("anchor_point", "")
-
-    anchor_point = priority_item.get("anchor_point", "")
-    keywords = brief.get("keywords", [])
-
-    # The content_brief from the plan — used as editing guidance
-    content_brief_context = content_item.get("content_brief", "") or content_item.get("llm_prompt", "")
-
-    # ── Build template variables ──
-    variables: dict[str, Any] = {
-        "brief": brief,
-        "persona": persona,
-        "anchor_point": anchor_point,
-        "question_text": question_text,
-    }
-    if needs_keywords:
-        variables["keywords"] = keywords
-
-    variables["content_brief"] = content_brief_context
-    variables["data_assets"] = campaign_data.get("data_assets", [])
-
-    # ── Inject persona-derived fields for richer prompt context (sliced to prevent bloat) ──
-    p = persona or {}
-    variables["persona_pain_points"] = p.get("pain_points", [])[:3]
-    variables["persona_vp_headline"] = p.get("vp_headline", "")
-    variables["persona_vp_argument"] = p.get("vp_argument", "")
-    variables["persona_objections"] = p.get("objections", [])[:2]
-    variables["persona_search_queries"] = p.get("search_queries", [])[:5]
-    variables["persona_info_channels"] = p.get("info_channels", [])[:3]
-
+    variables, format_str, template_name, task_key, needs_keywords = _build_variables(
+        campaign_data,
+        content_item,
+        question_id=priority_item.get("question_id", ""),
+        anchor_point=priority_item.get("anchor_point", ""),
+    )
     return variables, content_item, format_str, template_name, task_key, needs_keywords
+
+
+def _render_prompt(
+    variables: dict[str, Any],
+    template_name: str,
+    format_str: str,
+    language: str,
+) -> dict[str, Any]:
+    """Render a content template with the router's Jinja2 environment."""
+    from app.services.llm_router import _jinja_env
+
+    try:
+        tmpl = _jinja_env.get_template(f"{language}/{template_name}")
+    except Exception as e:
+        raise ValueError(
+            f"Template '{template_name}' not found for language '{language}'. "
+            f"This channel may not support the current campaign language."
+        ) from e
+
+    return {
+        "prompt": tmpl.render(**variables),
+        "template": template_name,
+        "format": format_str,
+        "language": language,
+    }
+
+
+async def _generate(
+    campaign_data: dict,
+    variables: dict[str, Any],
+    content_item: dict,
+    format_str: str,
+    template_name: str,
+    task_key: str,
+    language: str,
+) -> dict[str, Any]:
+    """Route a content item through the LLM and run the post-generation checks."""
+    logger.info(
+        "Generating content: format=%s → template=%s, task=%s",
+        format_str,
+        template_name,
+        task_key,
+    )
+
+    channel_fit_warning = check_channel_fit(
+        variables["persona"], content_item.get("channel", ""), language
+    )
+
+    result = await llm_router.route_and_generate(
+        task=task_key,
+        prompt_name=template_name,
+        variables=variables,
+        language=language,
+        max_tokens=4096,
+    )
+
+    return {
+        "text": result["text"],
+        "model": result["model"],
+        "format": format_str,
+        "template": template_name,
+        "channel_fit_warning": channel_fit_warning,
+        "risk_scan": scan_content_risks(
+            result["text"], campaign_data.get("data_assets", []), language
+        ),
+    }
 
 
 def compose_prompt(
@@ -283,29 +428,9 @@ def compose_prompt(
     Returns the rendered prompt as it would be sent to the model, along with
     metadata about the template and format used.
     """
-    variables, content_item, format_str, template_name, task_key, _ = \
+    variables, _item, format_str, template_name, _task, _ = \
         _build_content_variables(campaign_data, priority_index, content_index)
-
-    # Render using the same Jinja2 environment as the LLM router
-    from app.services.llm_router import _jinja_env
-
-    template_path = f"{language}/{template_name}"
-    try:
-        tmpl = _jinja_env.get_template(template_path)
-    except Exception:
-        raise ValueError(
-            f"Template '{template_name}' not found for language '{language}'. "
-            f"This channel may not support the current campaign language."
-        )
-
-    rendered = tmpl.render(**variables)
-
-    return {
-        "prompt": rendered,
-        "template": template_name,
-        "format": format_str,
-        "language": language,
-    }
+    return _render_prompt(variables, template_name, format_str, language)
 
 
 async def generate_content(
@@ -331,39 +456,10 @@ async def generate_content(
     """
     variables, content_item, format_str, template_name, task_key, _ = \
         _build_content_variables(campaign_data, priority_index, content_index)
-
-    logger.info(
-        "Generating content: format=%s → template=%s, task=%s, model chain routed",
-        format_str,
-        template_name,
-        task_key,
+    return await _generate(
+        campaign_data, variables, content_item,
+        format_str, template_name, task_key, language,
     )
-
-    # ── Channel-fit soft check (T4.9) ──
-    channel = content_item.get("channel", "")
-    channel_fit_warning = check_channel_fit(variables["persona"], channel, language)
-
-    # ── Call LLM Router ──
-    result = await llm_router.route_and_generate(
-        task=task_key,
-        prompt_name=template_name,
-        variables=variables,
-        language=language,
-        max_tokens=4096,
-    )
-
-    # ── T2: Pre-publish risk scan ──
-    data_assets = campaign_data.get("data_assets", [])
-    risk_scan = scan_content_risks(result["text"], data_assets, language)
-
-    return {
-        "text": result["text"],
-        "model": result["model"],
-        "format": format_str,
-        "template": template_name,
-        "channel_fit_warning": channel_fit_warning,
-        "risk_scan": risk_scan,
-    }
 
 
 # ── Custom Content (user-added, not plan-derived) ──
@@ -417,64 +513,21 @@ def build_custom_content_variables(
     campaign_data: dict,
     content_key: str | int,
 ) -> tuple[dict[str, Any], dict, str, str, str, bool]:
-    """Build Jinja2 variables for a custom content item.
+    """Build variables for a user-added custom content item.
 
-    Mirrors _build_content_variables but reads from campaign_data["custom_content"]
-    instead of plan.priorities[].content_plan[]. `content_key` is the item's
-    stable id (or a positional index for legacy campaigns).
+    `content_key` is the item's stable id (or a positional index for campaigns
+    created before ids existed).
     """
     custom_content = campaign_data.get("custom_content", [])
     item = custom_content[resolve_custom_index(custom_content, content_key)]
-    format_str = item.get("format", "")
-    if not format_str:
-        raise ValueError("Custom content item has no format — cannot determine template")
 
-    # Resolve format to template
-    resolved = _resolve_format(format_str)
-    template_name = str(resolved["template_name"])
-    task_key = str(resolved["task_key"])
-    needs_keywords = bool(resolved["needs_keywords"])
-
-    # Gather template variables
-    brief = campaign_data.get("brief", {})
-
-    # Persona lookup
-    personas = campaign_data.get("personas", [])
-    target_id = item.get("target_persona_id", "")
-    lang = campaign_data.get("language", "zh")
-    persona = _find_persona(personas, target_id, language=lang)
-
-    # Question / topic lookup
-    question_id = item.get("question_id", "")
-    questions = campaign_data.get("questions", [])
-    question_text = _find_question(questions, question_id)
-    if not question_text:
-        question_text = item.get("topic", item.get("anchor_point", ""))
-
-    anchor_point = item.get("anchor_point", "") or item.get("topic", "")
-
-    # Build variables (same shape as _build_content_variables output)
-    variables: dict[str, Any] = {
-        "brief": brief,
-        "persona": persona,
-        "anchor_point": anchor_point,
-        "question_text": question_text,
-    }
-    if needs_keywords:
-        variables["keywords"] = brief.get("keywords", [])
-
-    variables["content_brief"] = item.get("content_brief", "") or item.get("topic", "")
-    variables["data_assets"] = campaign_data.get("data_assets", [])
-
-    # Inject persona-derived fields
-    p = persona or {}
-    variables["persona_pain_points"] = p.get("pain_points", [])[:3]
-    variables["persona_vp_headline"] = p.get("vp_headline", "")
-    variables["persona_vp_argument"] = p.get("vp_argument", "")
-    variables["persona_objections"] = p.get("objections", [])[:2]
-    variables["persona_search_queries"] = p.get("search_queries", [])[:5]
-    variables["persona_info_channels"] = p.get("info_channels", [])[:3]
-
+    variables, format_str, template_name, task_key, needs_keywords = _build_variables(
+        campaign_data,
+        item,
+        question_id=item.get("question_id", ""),
+        anchor_point=item.get("anchor_point", "") or item.get("topic", ""),
+        subject_fallback=item.get("topic", ""),
+    )
     return variables, item, format_str, template_name, task_key, needs_keywords
 
 
@@ -484,28 +537,9 @@ def compose_custom_prompt(
     language: str = "zh",
 ) -> dict[str, Any]:
     """Compose the full prompt for a custom content item without calling the LLM."""
-    variables, _item, format_str, template_name, task_key, _ = \
+    variables, _item, format_str, template_name, _task, _ = \
         build_custom_content_variables(campaign_data, content_key)
-
-    from app.services.llm_router import _jinja_env
-
-    template_path = f"{language}/{template_name}"
-    try:
-        tmpl = _jinja_env.get_template(template_path)
-    except Exception:
-        raise ValueError(
-            f"Template '{template_name}' not found for language '{language}'. "
-            f"This channel may not support the current campaign language."
-        )
-
-    rendered = tmpl.render(**variables)
-
-    return {
-        "prompt": rendered,
-        "template": template_name,
-        "format": format_str,
-        "language": language,
-    }
+    return _render_prompt(variables, template_name, format_str, language)
 
 
 async def generate_custom_content(
@@ -516,33 +550,7 @@ async def generate_custom_content(
     """Generate content for a custom content item via LLM."""
     variables, item, format_str, template_name, task_key, _ = \
         build_custom_content_variables(campaign_data, content_key)
-
-    logger.info(
-        "Generating custom content: format=%s → template=%s, task=%s",
-        format_str,
-        template_name,
-        task_key,
+    return await _generate(
+        campaign_data, variables, item,
+        format_str, template_name, task_key, language,
     )
-
-    channel = item.get("channel", "")
-    channel_fit_warning = check_channel_fit(variables["persona"], channel, language)
-
-    result = await llm_router.route_and_generate(
-        task=task_key,
-        prompt_name=template_name,
-        variables=variables,
-        language=language,
-        max_tokens=4096,
-    )
-
-    data_assets = campaign_data.get("data_assets", [])
-    risk_scan = scan_content_risks(result["text"], data_assets, language)
-
-    return {
-        "text": result["text"],
-        "model": result["model"],
-        "format": format_str,
-        "template": template_name,
-        "channel_fit_warning": channel_fit_warning,
-        "risk_scan": risk_scan,
-    }

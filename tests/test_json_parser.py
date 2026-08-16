@@ -1,7 +1,6 @@
 """Tests for shared JSON parsing utilities — the pipeline choke point."""
 
-import pytest
-from app.utils.json_parser import extract_json_block, safe_parse_json, _close_truncated_json
+from app.utils.json_parser import _close_truncated_json, extract_json_block, safe_parse_json
 
 
 class TestExtractJsonBlock:

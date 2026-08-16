@@ -31,7 +31,14 @@ class Campaign(BaseModel):
     questions: list = Field(default_factory=list)
     diagnoses: list = Field(default_factory=list)
     data_assets: list[dict] = Field(default_factory=list)
-    # Each: {"claim": "Stellar P3E integrates 6x Cortex-R52", "source": "P3E datasheet DS14xxx rev3 p.12", "verified_by": "jania", "added_at": iso}
+    # Each entry: {
+    #   "claim":       "Stellar P3E integrates 6x Cortex-R52",
+    #   "source":      "P3E datasheet DS14xxx rev3 p.12",
+    #   "verified_by": "<reviewer>",
+    #   "added_at":    "<iso timestamp>",
+    # }
     plan: dict | None = None
 
-    current_tab: int = 0  # 0=Brief, 1=Persona, 2=Diagnosis, 3=Plan, 4=Content Studio
+    # 0=Brief, 1=Persona, 2=Diagnosis, 3=Plan, 4=Content Studio
+    # (see app.api.TAB_DEFINITIONS — the tab strip is defined there)
+    current_tab: int = 0

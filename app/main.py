@@ -29,8 +29,8 @@ def create_app() -> FastAPI:
         return JSONResponse(status_code=400, content={"detail": str(exc)})
 
     # Register API routers
-    from app.api.pages import router as pages_router
     from app.api.campaign import router as campaign_router
+    from app.api.pages import router as pages_router
 
     app.include_router(pages_router, tags=["pages"])
     app.include_router(campaign_router, prefix="/api", tags=["campaign"])

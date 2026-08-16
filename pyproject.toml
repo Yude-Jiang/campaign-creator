@@ -39,8 +39,19 @@ testpaths = ["tests"]
 pythonpath = ["."]
 
 [tool.ruff]
-line-length = 100
+# Bilingual CN/EN strings and inline HTML fragments read worse when reflowed,
+# so the limit is wider than the usual 100.
+line-length = 120
 target-version = "py312"
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B"]
+
+[tool.ruff.lint.per-file-ignores]
+# FastAPI's dependency defaults (File(...), Query(...)) are the documented idiom.
+"app/api/*.py" = ["B008"]
+# The HTML export builds markup in string literals; wrapping them obscures the
+# structure being emitted.
+"app/services/export_service.py" = ["E501"]
+# Test fixtures are CJK-heavy sample payloads.
+"tests/*.py" = ["E501"]

@@ -14,8 +14,8 @@ from app.api import MAX_TAB_INDEX
 from app.models.campaign import Campaign, CampaignBrief
 from app.utils.file_handler import (
     campaign_lock,
-    load_campaign_json,
     list_campaigns,
+    load_campaign_json,
     save_campaign_json,
     save_diagnosis_file,
 )
@@ -168,7 +168,8 @@ async def upload_diagnosis(campaign_id: str, file: UploadFile = File(...), quest
     if not any(fname.endswith(ext) for ext in allowed_exts):
         raise HTTPException(
             status_code=400,
-            detail="不支持的文件类型，仅接受 .md / .html / .htm | Unsupported file type — only .md / .html / .htm accepted",
+            detail="不支持的文件类型，仅接受 .md / .html / .htm | "
+                   "Unsupported file type — only .md / .html / .htm accepted",
         )
 
     content = await file.read()
@@ -176,7 +177,8 @@ async def upload_diagnosis(campaign_id: str, file: UploadFile = File(...), quest
     if len(content) > max_bytes:
         raise HTTPException(
             status_code=413,
-            detail=f"文件过大（{len(content) / 1024 / 1024:.1f} MB），上限 5 MB | File too large ({len(content) / 1024 / 1024:.1f} MB), limit 5 MB",
+            detail=f"文件过大（{len(content) / 1024 / 1024:.1f} MB），上限 5 MB | "
+                   f"File too large ({len(content) / 1024 / 1024:.1f} MB), limit 5 MB",
         )
 
     with campaign_lock(campaign_id):
@@ -396,9 +398,9 @@ async def generate_plan(campaign_id: str):
     try:
         plan = await generate_campaign_plan(data, language=language)
     except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        raise HTTPException(status_code=400, detail=str(e)) from e
     except RuntimeError as e:
-        raise HTTPException(status_code=502, detail=str(e))
+        raise HTTPException(status_code=502, detail=str(e)) from e
 
     # Write results under lock
     with campaign_lock(campaign_id):
@@ -524,7 +526,7 @@ def compose_content_prompt(campaign_id: str, body: ContentGenerateRequest):
             language=language,
         )
     except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        raise HTTPException(status_code=400, detail=str(e)) from e
 
     return {
         "ok": True,
@@ -559,9 +561,9 @@ async def generate_content(campaign_id: str, body: ContentGenerateRequest):
             language=language,
         )
     except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        raise HTTPException(status_code=400, detail=str(e)) from e
     except RuntimeError as e:
-        raise HTTPException(status_code=502, detail=str(e))
+        raise HTTPException(status_code=502, detail=str(e)) from e
 
     # Persist generated content under lock
     with campaign_lock(campaign_id):

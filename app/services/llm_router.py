@@ -161,11 +161,11 @@ class LLMRouter:
         template_path = f"{language}/{prompt_name}"
         try:
             template = _jinja_env.get_template(template_path)
-        except Exception:
+        except Exception as e:
             raise RuntimeError(
                 f"Prompt template '{prompt_name}' not found for language '{language}'. "
-                f"This task does not support the current language."
-            )
+                "This task does not support the current language."
+            ) from e
 
         full_prompt = template.render(**variables)
 

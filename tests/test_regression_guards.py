@@ -395,16 +395,18 @@ class TestTabIndexConsistency:
         )
 
     def test_model_comment_matches(self):
-        """Campaign.current_tab comment must list all EXPECTED_TAB_COUNT tabs."""
+        """The comment documenting Campaign.current_tab must list every tab."""
         model_src = (APP_DIR / "models" / "campaign.py").read_text(encoding="utf-8")
-        # Find:  current_tab: int = 0  # 0=Brief, 1=Persona, ...
-        match = re.search(r"current_tab.*?#\s*(.*)", model_src)
-        assert match, "Could not find current_tab comment in campaign.py model"
-        comment = match.group(1)
-        tab_refs = re.findall(r"(\d+)=", comment)
+        # The comment sits directly above or beside the field; find the "N=Name"
+        # enumeration wherever it lives.
+        enumerations = re.findall(r"((?:\d+=\w[\w ]*,?\s*)+)", model_src)
+        best = max(enumerations, key=lambda c: len(re.findall(r"\d+=", c)), default="")
+        tab_refs = re.findall(r"(\d+)=", best)
         assert len(tab_refs) == EXPECTED_TAB_COUNT, (
-            f"Model comment lists {len(tab_refs)} tabs ({comment}), expected {EXPECTED_TAB_COUNT}"
+            f"current_tab comment lists {len(tab_refs)} tabs ({best!r}), "
+            f"expected {EXPECTED_TAB_COUNT}"
         )
+        assert [int(t) for t in tab_refs] == sorted(TAB_INDICES)
 
     def test_every_tab_index_maps_to_an_existing_template(self):
         """TAB_TEMPLATES must cover every tab index and point at real files."""

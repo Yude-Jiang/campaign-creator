@@ -8,7 +8,7 @@ import json
 import logging
 
 from app.services.llm_router import llm_router
-from app.utils.json_parser import safe_parse_json, check_anchor_specificity
+from app.utils.json_parser import check_anchor_specificity, safe_parse_json
 
 logger = logging.getLogger(__name__)
 
