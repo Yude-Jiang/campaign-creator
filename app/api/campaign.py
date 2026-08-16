@@ -387,6 +387,58 @@ def delete_question(campaign_id: str, question_id: str):
     return {"ok": True, "campaign_id": campaign_id, "deleted": question_id}
 
 
+# ── Persona Export (Tab 1) ──
+
+
+def _persona_export_payload(campaign_id: str) -> dict:
+    data = load_campaign_json(campaign_id)
+    if not data:
+        raise HTTPException(status_code=404, detail="Campaign 不存在 | Campaign not found")
+    if not data.get("personas"):
+        raise HTTPException(
+            status_code=400,
+            detail="尚未生成 Persona | No personas generated yet",
+        )
+    return data
+
+
+@router.get("/campaigns/{campaign_id}/persona/export/md", response_class=PlainTextResponse)
+def export_personas_markdown(campaign_id: str, lang: str | None = Query(None)):
+    """Export personas, value propositions, and benchmark questions as Markdown."""
+    data = _persona_export_payload(campaign_id)
+
+    from app.services.export_service import export_personas_to_markdown
+
+    md = export_personas_to_markdown(data, language=lang or data.get("language", "zh"))
+    return PlainTextResponse(
+        content=md,
+        media_type="text/markdown; charset=utf-8",
+        headers={"Content-Disposition": f"attachment; filename={campaign_id}_personas.md"},
+    )
+
+
+@router.get("/campaigns/{campaign_id}/persona/export/html", response_class=HTMLResponse)
+def export_personas_html(
+    campaign_id: str,
+    lang: str | None = Query(None),
+    download: int = Query(0),
+):
+    """Export personas as a styled HTML report.
+
+    `download=1` forces a file download; otherwise the report opens in a tab.
+    """
+    data = _persona_export_payload(campaign_id)
+
+    from app.services.export_service import export_personas_to_html
+
+    html_doc = export_personas_to_html(data, language=lang or data.get("language", "zh"))
+    headers = (
+        {"Content-Disposition": f"attachment; filename={campaign_id}_personas.html"}
+        if download else {}
+    )
+    return HTMLResponse(content=html_doc, headers=headers)
+
+
 # ═══════════════════════════════════════════════════════════════
 # Campaign Plan Generation
 # ═══════════════════════════════════════════════════════════════

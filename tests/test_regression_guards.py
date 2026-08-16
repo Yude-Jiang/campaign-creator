@@ -1355,3 +1355,193 @@ class TestMasterPersonaProvenance:
             assert f"### {code}" in text, (
                 f"{f.name} (code {code}) has no Sources section in PROVENANCE.md"
             )
+
+
+# ═══════════════════════════════════════════════════════════
+# Persona export (Tab 1)
+# ═══════════════════════════════════════════════════════════
+
+PERSONA_EXPORT_CAMPAIGN = {
+    "campaign_id": "exp",
+    "language": "zh",
+    "brief": {"name": "导出测试", "topic": "ZCU", "industry": "半导体", "goal": "新品造势"},
+    "persona_grounding": {
+        "requested": True, "used": True, "queries": ["ZCU 选型"],
+        "sources": [{"url": "https://zhihu.com/q/1", "title": "ZCU 讨论"}],
+    },
+    "question_grounding": {"requested": True, "used": False, "sources": [], "queries": []},
+    "personas": [
+        {
+            "id": "p1", "name": "系统架构师", "layer": "practitioner", "tech_depth": "deep",
+            "decision_weight": "high", "decision_role": "implementer", "funnel_stage": "how",
+            "basis": "anchored", "anchor": "m03",
+            "pain_points": ["数据手册不透明", XSS_PAYLOAD],
+            "search_queries": ["ZCU 主控选型"],
+            "vp_headline": "一颗芯片搞定 ZCU", "vp_argument": "锁步双核架构。",
+            "vp_proof_points": ["支持 AUTOSAR 双平台"],
+            "vp_competitor_comparison": {"vs NXP S32G": "集成度更高"},
+            "preferred_channels": ["知乎"], "avoid_channels": ["产品页 SEO 内容"],
+        },
+        {"id": "p2", "name": "KOL", "layer": "influencer", "basis": "generated",
+         "pain_points": ["缺趋势解读"]},
+    ],
+    "questions": [{"id": "q1", "text": "ZCU 主控怎么选？", "category": "selection",
+                   "diagnostic_value": "high", "funnel_stage": "what"}],
+}
+
+
+class TestPersonaExportContent:
+    """The export is the artifact that leaves the tool, so every credibility
+    signal the UI shows has to survive into it — otherwise the export becomes
+    the channel through which unsourced claims circulate."""
+
+    def _md(self):
+        from app.services.export_service import export_personas_to_markdown
+
+        return export_personas_to_markdown(PERSONA_EXPORT_CAMPAIGN)
+
+    def _html(self):
+        from app.services.export_service import export_personas_to_html
+
+        return export_personas_to_html(PERSONA_EXPORT_CAMPAIGN)
+
+    @pytest.mark.parametrize("fmt", ["md", "html"])
+    def test_carries_persona_grounding_sources(self, fmt):
+        doc = self._md() if fmt == "md" else self._html()
+        assert "https://zhihu.com/q/1" in doc
+        assert "ZCU 选型" in doc, "the queries actually issued should be shown"
+
+    @pytest.mark.parametrize("fmt", ["md", "html"])
+    def test_states_when_a_phase_never_searched(self, fmt):
+        doc = self._md() if fmt == "md" else self._html()
+        assert "未实际发起检索" in doc
+
+    @pytest.mark.parametrize("fmt", ["md", "html"])
+    def test_carries_the_vp_ungrounded_caveat(self, fmt):
+        doc = self._md() if fmt == "md" else self._html()
+        assert "不联网" in doc
+        # No data assets on this campaign → the no-numbers warning must appear.
+        assert "未录入任何已核实数据资产" in doc
+
+    def test_vp_asset_warning_disappears_when_assets_exist(self):
+        from app.services.export_service import export_personas_to_markdown
+
+        with_assets = dict(PERSONA_EXPORT_CAMPAIGN)
+        with_assets["data_assets"] = [{"claim": "x", "source": "y"}]
+        md = export_personas_to_markdown(with_assets)
+        assert "未录入任何已核实数据资产" not in md
+        assert "不联网" in md, "the ungrounded caveat still applies"
+
+    @pytest.mark.parametrize("fmt", ["md", "html"])
+    def test_shows_provenance_per_persona(self, fmt):
+        doc = self._md() if fmt == "md" else self._html()
+        assert "骨架锚定" in doc
+        assert "自由生成" in doc
+
+    @pytest.mark.parametrize("fmt", ["md", "html"])
+    def test_internal_anchor_code_never_leaks(self, fmt):
+        doc = self._md() if fmt == "md" else self._html()
+        assert "m03" not in doc, "the internal skeleton code must stay internal"
+
+    def test_html_export_escapes_untrusted_persona_text(self):
+        from bs4 import BeautifulSoup
+
+        html_doc = self._html()
+        soup = BeautifulSoup(html_doc, "html.parser")
+        assert soup.find_all("script") == []
+        assert not [k for t in soup.find_all(True) for k in t.attrs if k.lower().startswith("on")]
+        assert XSS_PAYLOAD in soup.get_text(), "payload should survive as visible text"
+
+    def test_html_lists_are_balanced(self):
+        html_doc = self._html()
+        assert html_doc.count("<ul>") == html_doc.count("</ul>")
+        assert html_doc.count("<table>") == html_doc.count("</table>")
+
+    def test_markdown_pipes_in_question_text_do_not_break_the_table(self):
+        from app.services.export_service import export_personas_to_markdown
+
+        campaign = dict(PERSONA_EXPORT_CAMPAIGN)
+        campaign["questions"] = [{"id": "q1", "text": "A | B | C", "category": "x"}]
+        md = export_personas_to_markdown(campaign)
+        row = next(ln for ln in md.splitlines() if ln.startswith("| q1 "))
+        assert r"A \| B \| C" in row, f"pipes in question text not escaped: {row}"
+        # Structural pipes only — the escaped ones must not split the row.
+        structural = row.replace(r"\|", "").count("|")
+        assert structural == 6, f"row has {structural} cells, expected 5: {row}"
+
+    def test_english_campaign_exports_in_english(self):
+        from app.services.export_service import export_personas_to_markdown
+
+        campaign = dict(PERSONA_EXPORT_CAMPAIGN)
+        campaign["language"] = "en"
+        md = export_personas_to_markdown(campaign)
+        assert "Personas & Benchmark Questions" in md
+        assert "Anchored" in md and "Generated" in md
+        assert "骨架锚定" not in md
+
+    def test_shared_stylesheet_is_not_duplicated(self):
+        """Plan and persona HTML exports must not drift apart."""
+        from app.services.export_service import _REPORT_CSS, export_to_html
+
+        plan_html = export_to_html({"priorities": []}, {"brief": {"name": "c"}, "questions": []})
+        assert "--navy: #03234B" in plan_html
+        assert "--navy: #03234B" in self._html()
+        assert "{" in _REPORT_CSS and "{{" not in _REPORT_CSS
+
+
+class TestPersonaExportEndpoints:
+    def _client(self, tmp_path, monkeypatch):
+        import app.utils.file_handler as fh
+        from app.main import app as fastapi_app
+
+        monkeypatch.setattr(fh, "CAMPAIGNS_DIR", tmp_path / "campaigns")
+        return TestClient(fastapi_app)
+
+    def _seeded(self, client) -> str:
+        cid = client.post("/api/campaigns", json={
+            "brief": {"name": "exp-ep", "topic": "ZCU", "language": "zh"},
+        }).json()["campaign_id"]
+        payload = dict(PERSONA_EXPORT_CAMPAIGN)
+        payload["campaign_id"] = cid
+        client.put(f"/api/campaigns/{cid}", json=payload)
+        return cid
+
+    def test_markdown_download_headers(self, tmp_path, monkeypatch):
+        client = self._client(tmp_path, monkeypatch)
+        cid = self._seeded(client)
+        resp = client.get(f"/api/campaigns/{cid}/persona/export/md")
+        assert resp.status_code == 200
+        assert resp.headers["content-disposition"].endswith(f"{cid}_personas.md")
+        assert "charset=utf-8" in resp.headers["content-type"]
+        assert "系统架构师" in resp.text
+
+    def test_html_downloads_only_when_asked(self, tmp_path, monkeypatch):
+        client = self._client(tmp_path, monkeypatch)
+        cid = self._seeded(client)
+
+        preview = client.get(f"/api/campaigns/{cid}/persona/export/html")
+        assert preview.status_code == 200
+        assert "content-disposition" not in preview.headers
+
+        download = client.get(f"/api/campaigns/{cid}/persona/export/html?download=1")
+        assert download.status_code == 200
+        assert download.headers["content-disposition"].endswith(f"{cid}_personas.html")
+
+    def test_400_before_personas_exist(self, tmp_path, monkeypatch):
+        client = self._client(tmp_path, monkeypatch)
+        cid = client.post("/api/campaigns", json={
+            "brief": {"name": "empty-exp", "topic": "t", "language": "zh"},
+        }).json()["campaign_id"]
+        resp = client.get(f"/api/campaigns/{cid}/persona/export/md")
+        assert resp.status_code == 400
+        assert "No personas generated yet" in resp.json()["detail"]
+
+    def test_404_for_unknown_campaign(self, tmp_path, monkeypatch):
+        client = self._client(tmp_path, monkeypatch)
+        assert client.get("/api/campaigns/nope/persona/export/md").status_code == 404
+
+    def test_buttons_are_on_the_page(self):
+        tmpl = (TEMPLATES_DIR / "tab_persona.html").read_text(encoding="utf-8")
+        assert "exportPersonas('md')" in tmpl
+        assert "exportPersonas('html')" in tmpl
+        assert "persona/export/" in tmpl

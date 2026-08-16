@@ -108,9 +108,19 @@
     <h3 style="font-size:16px;color:var(--navy);margin:0;">
       🎯 {% if language == 'zh' %}目标 Persona（{{ campaign.personas|length }} 个）{% else %}Target Personas ({{ campaign.personas|length }}){% endif %}
     </h3>
-    <button class="btn btn-secondary" style="font-size:12px;padding:4px 12px;" onclick="addPersona()">
-      + {% if language == 'zh' %}添加 Persona{% else %}Add Persona{% endif %}
-    </button>
+    <div style="display:flex;gap:8px;align-items:center;">
+      <button class="btn btn-secondary" style="font-size:12px;padding:4px 12px;" onclick="exportPersonas('md')"
+              title="{% if language == 'zh' %}下载 Markdown（含来源与可信度说明）{% else %}Download Markdown (includes provenance){% endif %}">
+        📄 {% if language == 'zh' %}导出 MD{% else %}Export MD{% endif %}
+      </button>
+      <button class="btn btn-secondary" style="font-size:12px;padding:4px 12px;" onclick="exportPersonas('html')"
+              title="{% if language == 'zh' %}下载 HTML 报告{% else %}Download HTML report{% endif %}">
+        🌐 {% if language == 'zh' %}导出 HTML{% else %}Export HTML{% endif %}
+      </button>
+      <button class="btn btn-secondary" style="font-size:12px;padding:4px 12px;" onclick="addPersona()">
+        + {% if language == 'zh' %}添加 Persona{% else %}Add Persona{% endif %}
+      </button>
+    </div>
   </div>
 
   {% if campaign.persona_grounding %}
@@ -410,6 +420,12 @@
   ← {% if language == 'zh' %}返回 Brief{% else %}Back to Brief{% endif %}
 </button>
 {% if campaign.personas %}
+<button class="btn btn-secondary" onclick="exportPersonas('md')">
+  📄 {% if language == 'zh' %}导出 MD{% else %}Export MD{% endif %}
+</button>
+<button class="btn btn-secondary" onclick="exportPersonas('html')">
+  🌐 {% if language == 'zh' %}导出 HTML{% else %}Export HTML{% endif %}
+</button>
 <button class="btn btn-primary" onclick="navigateToTab(2)">
   {% if language == 'zh' %}继续 → GEO Diagnosis{% else %}Next → GEO Diagnosis{% endif %}
 </button>
@@ -643,6 +659,16 @@ async function deleteQuestion(qid) {
 }
 
 // ── Persona Generation (unchanged flow) ──
+/** Download the persona / VP / questions export.
+ *  Both routes set Content-Disposition, so a plain navigation saves the file. */
+function exportPersonas(format) {
+  const base = '/api/campaigns/{{ campaign_id }}/persona/export/';
+  const url = format === 'html'
+    ? base + 'html?lang={{ language }}&download=1'
+    : base + 'md?lang={{ language }}';
+  window.location.href = url;
+}
+
 async function generatePersona() {
   const loading = document.getElementById('llm-loading');
   if (loading) loading.style.display = 'flex';
