@@ -1213,11 +1213,16 @@ class TestVpPromptDoesNotDemandFabrication:
         en = self._render("en", [])
         assert "not specific numbers" in en
 
-    def test_competitor_comparison_rule_is_scoped_when_unsourced(self):
-        zh = self._render("zh", [])
-        assert "定性判断" in zh
-        en = self._render("en", [])
-        assert "stated qualitatively" in en
+    def test_scenario_delimitation_is_scoped_when_unsourced(self):
+        """Comparison is forbidden outright now; what remains scoped by the
+        no-assets case is how the scenario may be delimited."""
+        import re
+
+        # The rules are hard-wrapped, so compare on normalised whitespace.
+        zh = re.sub(r"\s+", "", self._render("zh", []))
+        assert "不得出现任何参数、比例或性能数字" in zh
+        en = re.sub(r"\s+", " ", self._render("en", []))
+        assert "no parameters, ratios, or performance figures" in en
 
 
 class TestPersonaGenerationFailsLoudly:
@@ -1812,7 +1817,7 @@ class TestDiagnosisReachesContentGeneration:
     def test_gap_type_strategy_reaches_the_prompt(self):
         prompt = self._prompt()
         assert "rival_owned" in prompt
-        assert "重构评价维度" in prompt, (
+        assert "子场景" in prompt, (
             "the gap type must bring its content strategy, not just its name"
         )
 
@@ -2021,3 +2026,111 @@ class TestFlagshipTemplateCraft:
         """A prompt that dwarfs the brief crowds out the diagnosis and persona."""
         rendered = self._render("deep")
         assert len(rendered) < 12000, f"prompt grew to {len(rendered)} chars"
+
+
+class TestNoHeadToHeadPositioning:
+    """Editorial policy: never go head-to-head with a competitor; speak only to
+    the scenarios where we are strongest. This has to hold across every template
+    and every generated artefact, so it lives in one shared partial that all of
+    them include."""
+
+    ALL_PROMPTS = sorted(
+        f"{p.parent.name}/{p.name}"
+        for p in (APP_DIR / "prompts").glob("*/content_*.md")
+    )
+
+    @pytest.mark.parametrize("template", ALL_PROMPTS)
+    def test_every_content_template_includes_the_policy(self, template):
+        src = (APP_DIR / "prompts" / template).read_text(encoding="utf-8")
+        assert "_shared/positioning_policy.md" in src
+
+    @pytest.mark.parametrize("template", ALL_PROMPTS)
+    def test_policy_is_stated_before_the_other_rules(self, template):
+        """It has to read as the governing constraint, not one more bullet."""
+        src = (APP_DIR / "prompts" / template).read_text(encoding="utf-8")
+        policy_at = src.index("_shared/positioning_policy.md")
+        for later in ("## 硬性规则", "## Hard Rules"):
+            if later in src:
+                assert policy_at < src.index(later), (
+                    f"{template} states the hard rules before the policy"
+                )
+
+    @pytest.mark.parametrize("template", ALL_PROMPTS)
+    def test_no_template_still_permits_competitor_mentions(self, template):
+        """Every template used to allow competitor names 'in comparison
+        passages, at most twice'."""
+        src = (APP_DIR / "prompts" / template).read_text(encoding="utf-8")
+        assert "每个竞品名全篇出现不超过 2 次" not in src
+        assert "竞品仅在参数对照处出现" not in src
+
+    def test_competitor_data_is_labelled_internal_where_it_is_rendered(self):
+        """vp_competitor_comparison still reaches the prompt — it is how the
+        writer knows which ground is taken — but must be marked unusable in
+        the copy."""
+        from app.services.llm_router import _jinja_env
+
+        rendered = _jinja_env.get_template("zh/content_zhihu_long.md").render(
+            **TestFlagshipTemplateCraft.BASE, persona_tech_depth="deep"
+        )
+        assert "不得写进正文" in rendered
+
+    def test_rival_owned_strategy_does_not_tell_the_model_to_contest(self):
+        from app.services.content_service import GAP_TYPE_STRATEGY
+
+        zh = GAP_TYPE_STRATEGY["rival_owned"]["zh"]
+        assert "不要去争这个位置" in zh
+        assert "子场景" in zh, "the move is to go narrower, not to compare"
+
+        en = GAP_TYPE_STRATEGY["rival_owned"]["en"]
+        assert "Do not contest" in en
+        assert "sub-scenario" in en
+
+    def test_diagnostic_competitor_list_forbids_copying_names_out(self):
+        from app.services.llm_router import _jinja_env
+
+        for lang, marker in (("zh", "不得出现在正文中"),
+                             ("en", "None of these names may appear in the copy")):
+            rendered = _jinja_env.get_template(
+                f"{lang}/_shared/diagnostic_context.md"
+            ).render(diagnostic={
+                "gap_type": "rival_owned", "gap_strategy": "s",
+                "competitor_landscape": [{"competitor": "RIVAL", "position": "p"}],
+                "diagnosis_excerpt": "", "ai_perception_summary": "",
+            })
+            assert marker in rendered
+
+    def test_vp_prompt_no_longer_demands_naming_competitors(self):
+        from app.services.llm_router import _jinja_env
+
+        for lang in ("zh", "en"):
+            rendered = _jinja_env.get_template(f"{lang}/vp_generation.md").render(
+                brief={"name": "C", "topic": "t", "industry": "i", "products": ["P"],
+                       "keywords": ["k"], "competitors_known": ["RIVAL"]},
+                personas=[{"id": "p1", "name": "A", "layer": "practitioner",
+                           "tech_depth": "deep", "decision_weight": "high",
+                           "pain_points": ["x"], "objections": [],
+                           "decision_criteria": [], "info_channels": ["c"]}],
+                data_assets=[{"claim": "c", "source": "s"}],
+            )
+            assert "必须指名对比" not in rendered
+            assert "must name them" not in rendered
+
+    @pytest.mark.parametrize("lang,phrases", [
+        ("zh", ["不与竞品正面对峙", "正文不出现竞品名", "不比较，只界定"]),
+        ("en", ["Never go head-to-head", "No competitor names in the body",
+                "Delimit, do not compare"]),
+    ])
+    def test_policy_states_the_rule_unambiguously(self, lang, phrases):
+        src = (APP_DIR / "prompts" / lang / "_shared" /
+               "positioning_policy.md").read_text(encoding="utf-8")
+        for phrase in phrases:
+            assert phrase in src
+
+    @pytest.mark.parametrize("lang", ["zh", "en"])
+    def test_policy_explains_the_geo_rationale(self, lang):
+        """A rule the model understands the reason for is followed more
+        reliably than a bare prohibition — and here the reason is technical,
+        not just brand preference."""
+        src = (APP_DIR / "prompts" / lang / "_shared" /
+               "positioning_policy.md").read_text(encoding="utf-8")
+        assert ("语义关联" in src) or ("association" in src)

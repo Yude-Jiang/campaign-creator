@@ -18,9 +18,13 @@
 {{ diagnostic.ai_perception_summary }}
 {% endif %}
 {% if diagnostic.competitor_landscape %}
-### 当前占位者
+### 当前占位者（内部输入 — 用于判断该避开哪块地、该主打哪个场景）
+
+⚠ 以下名称**一律不得出现在正文中**。列在这里是让你知道哪些位置已经被占住、不要去争，
+不是让你去比较。
+
 {% for c in diagnostic.competitor_landscape %}
-- **{{ c.competitor }}**{% if c.position %}：{{ c.position }}{% endif %}{% if c.strategy %} → 应对：{{ c.strategy }}{% endif %}
+- **{{ c.competitor }}**{% if c.position %}：已占据「{{ c.position }}」{% endif %}
 {% endfor %}
 {% endif %}
 {% if diagnostic.diagnosis_excerpt %}
@@ -30,6 +34,11 @@
 {{ diagnostic.diagnosis_excerpt }}
 ```
 
-**用法**：从上面这段真实回答里找出至少一个具体的认知偏差——被忽略的维度、被错误归因的能力、被默认成唯一解的方案——并在正文中正面处理它。不要泛泛地说"市场存在误解"，要针对上面出现过的具体说法。
+**用法**：从这段真实回答里找出**被忽略的那个维度**——模型没考虑到的约束、被当成不重要的条件、
+被默认成唯一路径的做法。然后把文章建立在那个维度上，讲清楚"当这个维度成为主要约束时，
+事情该怎么做"。
+
+注意：是**补上被忽略的维度**，不是反驳上面提到的方案。诊断原文里出现的任何厂商名，
+都不得出现在你的正文中。
 {% endif %}
 {% endif %}

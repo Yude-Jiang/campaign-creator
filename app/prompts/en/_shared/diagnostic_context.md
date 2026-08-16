@@ -20,9 +20,13 @@ this specific gap.
 {{ diagnostic.ai_perception_summary }}
 {% endif %}
 {% if diagnostic.competitor_landscape %}
-### Who owns the answer today
+### Who owns the answer today (internal — for choosing ground, not for contesting it)
+
+⚠ None of these names may appear in the copy. They are listed so you know which
+positions are taken and can avoid them, not so you can compare against them.
+
 {% for c in diagnostic.competitor_landscape %}
-- **{{ c.competitor }}**{% if c.position %}: {{ c.position }}{% endif %}{% if c.strategy %} → counter: {{ c.strategy }}{% endif %}
+- **{{ c.competitor }}**{% if c.position %}: holds "{{ c.position }}"{% endif %}
 {% endfor %}
 {% endif %}
 {% if diagnostic.diagnosis_excerpt %}
@@ -32,9 +36,13 @@ this specific gap.
 {{ diagnostic.diagnosis_excerpt }}
 ```
 
-**Use it**: find at least one concrete misconception in the answer above — a
-dimension it ignores, a capability it misattributes, a solution it treats as
-the only option — and address that head-on in the body. Do not write "there
-are misconceptions in the market"; address what the excerpt actually says.
+**Use it**: find the **dimension the answer overlooks** — a constraint it does
+not weigh, a condition it treats as unimportant, a path it assumes is the only
+one. Build the piece on that dimension: what to do when it becomes the binding
+constraint.
+
+Note this is about **supplying the missing dimension**, not rebutting the
+approaches mentioned. No vendor name appearing in the excerpt may appear in
+your copy.
 {% endif %}
 {% endif %}

@@ -328,24 +328,29 @@ def _find_question(questions: list[dict], question_id: str) -> str:
 # Each gap type calls for a structurally different piece, not a different tone.
 GAP_TYPE_STRATEGY: dict[str, dict[str, str]] = {
     "open_gap": {
-        "zh": "无人占位：该问题下没有任何厂商建立起权威答案。内容目标是**定义品类和评价维度**——"
-              "先把问题结构讲清楚，再让本品牌方案成为该框架下的自然答案。抢定义权优先于抢曝光。",
-        "en": "Open gap: no vendor owns the answer here. The goal is to **define the category and its "
-              "evaluation criteria** — frame the problem first, then let this solution follow naturally "
-              "from that frame. Owning the definition matters more than visibility.",
+        "zh": "无人占位：该问题下没有任何厂商建立起权威答案。内容目标是**定义场景和它的判据**——"
+              "把「什么条件下该这样做」讲成只有你讲得清的样子。抢定义权优先于抢曝光。",
+        "en": "Open gap: no vendor owns the answer here. The goal is to **define the scenario and its "
+              "criteria** — cover 'under what conditions this is the right call' so thoroughly that the "
+              "framing becomes yours. Owning the definition matters more than visibility.",
     },
     "rival_owned": {
-        "zh": "竞品占位：AI 已把该问题的答案绑定到竞品。正面比参数会强化对方的框架。内容目标是"
-              "**重构评价维度**——指出现有答案在什么使用场景下不成立，用一个对读者更重要的新维度切入。",
-        "en": "Rival-owned: the models already bind this answer to a competitor. Competing on their "
-              "parameters reinforces their frame. The goal is to **reframe the evaluation axis** — show "
-              "where the incumbent answer breaks down, and lead with a dimension that matters more.",
+        "zh": "已有他方占位：AI 已把该问题的答案绑定到别的方案。**不要去争这个位置**——正面比较"
+              "只会加固对方与该问题的语义关联。改为向下切一层：找出该问题里我们条件最优的**子场景**，"
+              "把整篇文章收敛到那个子场景上，讲透它的约束、判据和取舍。目标不是赢得这个 query，"
+              "是成为它下一层某个更具体 query 的唯一答案。",
+        "en": "Already owned by another approach: the models bind this answer elsewhere. **Do not contest "
+              "that position** — comparison only reinforces their association with the question. Go one "
+              "level narrower instead: find the **sub-scenario** within this question where our conditions "
+              "are strongest, and commit the whole piece to it — its constraints, its criteria, its "
+              "trade-offs. The goal is not to win this query but to become the only answer to a more "
+              "specific one beneath it.",
     },
     "not_linked": {
         "zh": "认知未关联：品牌本身被认知，但没有和这个主题建立联系。内容目标是**建立证据链**——"
-              "把品牌既有能力和该问题显式连起来，让关联关系在文本中可被直接提取，而不是靠读者推断。",
+              "把既有能力和该场景显式连起来，让关联在文本中可被直接提取，而不是靠读者推断。",
         "en": "Not linked: the brand is known but not connected to this topic. The goal is to **build the "
-              "evidence chain** — state the connection between existing capability and this problem "
+              "evidence chain** — state the connection between existing capability and this scenario "
               "explicitly, so it can be extracted directly rather than inferred.",
     },
     "buried_in_pdf": {
