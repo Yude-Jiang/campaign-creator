@@ -1090,6 +1090,33 @@ class TestGroundingHonesty:
         assert _extract_grounding_queries_rest(untouched) == []
         assert _extract_grounding_sources_rest(untouched) == []
 
+    def test_vertex_rest_uses_googleSearch_not_google_search(self):
+        """Vertex proto JSON is camelCase. google_search is silently dropped,
+        which made both persona and question phases look unsearched."""
+        import json
+
+        from app.services.providers.gemini import _vertex_generate_body
+
+        plain = _vertex_generate_body("hi", grounding=False)
+        assert "tools" not in plain
+
+        grounded = _vertex_generate_body("hi", grounding=True)
+        assert grounded["tools"] == [{"googleSearch": {}}]
+        dumped = json.dumps(grounded)
+        assert "googleSearch" in dumped
+        assert "google_search" not in dumped
+
+    def test_grounding_prompts_require_search_before_json(self):
+        """JSON-only as rule 1 let Gemini skip the optional search tool."""
+        for rel in (
+            "prompts/zh/persona_discovery.md",
+            "prompts/en/persona_discovery.md",
+            "prompts/zh/question_discovery.md",
+            "prompts/en/question_discovery.md",
+        ):
+            text = (APP_DIR / rel).read_text(encoding="utf-8")
+            assert "Google" in text and ("必须先检索" in text or "Search first" in text), rel
+
     def test_persona_phase_sources_are_not_discarded(self):
         """Phase 1's citations were overwritten by Phase 3's."""
         src = (APP_DIR / "services" / "persona_service.py").read_text(encoding="utf-8")

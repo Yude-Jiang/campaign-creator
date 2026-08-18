@@ -26,6 +26,33 @@ VERTEX_URL = (
 )
 
 
+def _vertex_generate_body(
+    prompt: str,
+    system_prompt: str = "",
+    max_tokens: int = 4096,
+    temperature: float = 0.7,
+    grounding: bool = False,
+) -> dict[str, Any]:
+    """Build the Vertex AI generateContent JSON body.
+
+    Vertex REST uses proto camelCase. ``google_search`` is the Gemini Developer
+    API name; sending it to Vertex is ignored as an unknown field, so the model
+    never receives the search tool. Persona and question discovery then both
+    report "tool offered, never invoked".
+    """
+    full_prompt = f"{system_prompt}\n\n{prompt}" if system_prompt else prompt
+    body: dict[str, Any] = {
+        "contents": [{"role": "user", "parts": [{"text": full_prompt}]}],
+        "generationConfig": {
+            "maxOutputTokens": max_tokens,
+            "temperature": temperature,
+        },
+    }
+    if grounding:
+        body["tools"] = [{"googleSearch": {}}]
+    return body
+
+
 def _extract_grounding_sources_rest(result: dict) -> list[dict]:
     """Extract grounding web sources from Vertex AI REST response."""
     sources: list[dict] = []
@@ -160,22 +187,18 @@ class GeminiProvider(BaseProvider):
         if not token:
             raise RuntimeError("Cannot get gcloud access token — run 'gcloud auth login'")
 
-        full_prompt = f"{system_prompt}\n\n{prompt}" if system_prompt else prompt
-
         url = VERTEX_URL.format(
             project=settings.google_cloud_project,
             model="gemini-2.5-flash",
         )
 
-        body_dict: dict[str, Any] = {
-            "contents": [{"role": "user", "parts": [{"text": full_prompt}]}],
-            "generationConfig": {
-                "maxOutputTokens": max_tokens,
-                "temperature": temperature,
-            },
-        }
-        if grounding:
-            body_dict["tools"] = [{"google_search": {}}]
+        body_dict = _vertex_generate_body(
+            prompt=prompt,
+            system_prompt=system_prompt,
+            max_tokens=max_tokens,
+            temperature=temperature,
+            grounding=grounding,
+        )
         body = json.dumps(body_dict).encode("utf-8")
 
         req = urllib.request.Request(url, data=body, headers={
