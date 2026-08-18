@@ -1,8 +1,11 @@
 """Tests for utility functions — file_handler validation, slugify, etc."""
 
+from urllib.parse import unquote
+
 import pytest
 
 from app.utils.file_handler import validate_campaign_id
+from app.utils.http import content_disposition_attachment
 
 
 class TestValidateCampaignId:
@@ -74,3 +77,33 @@ class TestSlugify:
     def test_empty_returns_untitled(self):
         from app.api.campaign import _slugify
         assert _slugify("!!!") == "untitled"
+
+
+class TestContentDispositionAttachment:
+    """HTTP headers are latin-1; CJK campaign IDs must use RFC 5987 filename*."""
+
+    def test_ascii_keeps_legacy_filename_form(self):
+        header = content_disposition_attachment("exp-ep_personas.md")["Content-Disposition"]
+        assert header == "attachment; filename=exp-ep_personas.md"
+        header.encode("latin-1")
+
+    def test_cjk_uses_rfc5987_and_is_latin1_safe(self):
+        filename = "区域控制器方案_personas.md"
+        header = content_disposition_attachment(filename)["Content-Disposition"]
+        header.encode("latin-1")
+        assert "filename*" in header
+        encoded = header.split("filename*=utf-8''", 1)[1]
+        assert unquote(encoded) == filename
+        # Positions 24-34 of the old raw header were the CJK campaign id —
+        # the raw form must not appear, or Starlette raises UnicodeEncodeError.
+        assert filename not in header
+        assert header.startswith("attachment; filename=")
+        assert header.split(";", 1)[1].split("filename*=", 1)[0].isascii()
+
+    def test_mixed_ascii_prefix_keeps_readable_fallback(self):
+        filename = "st-区域控制器_personas.md"
+        header = content_disposition_attachment(filename)["Content-Disposition"]
+        header.encode("latin-1")
+        assert "filename=st-personas.md;" in header
+        encoded = header.split("filename*=utf-8''", 1)[1]
+        assert unquote(encoded) == filename
