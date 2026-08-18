@@ -1532,6 +1532,36 @@ class TestPersonaExportEndpoints:
         assert download.status_code == 200
         assert download.headers["content-disposition"].endswith(f"{cid}_personas.html")
 
+    def test_cjk_campaign_id_download_does_not_latin1_crash(self, tmp_path, monkeypatch):
+        """CJK campaign IDs used to blow up Content-Disposition (latin-1 headers)."""
+        from urllib.parse import unquote
+
+        client = self._client(tmp_path, monkeypatch)
+        created = client.post("/api/campaigns", json={
+            "brief": {"name": "区域控制器方案", "topic": "ZCU", "language": "zh"},
+        })
+        assert created.status_code == 200
+        cid = created.json()["campaign_id"]
+        assert any(ord(c) > 127 for c in cid)
+
+        payload = dict(PERSONA_EXPORT_CAMPAIGN)
+        payload["campaign_id"] = cid
+        assert client.put(f"/api/campaigns/{cid}", json=payload).status_code == 200
+
+        resp = client.get(f"/api/campaigns/{cid}/persona/export/md")
+        assert resp.status_code == 200, resp.text
+        disp = resp.headers["content-disposition"]
+        disp.encode("latin-1")
+        assert "latin-1" not in resp.text
+        assert "filename*" in disp
+        assert unquote(disp.split("filename*=utf-8''", 1)[1]) == f"{cid}_personas.md"
+        assert "系统架构师" in resp.text
+
+        html = client.get(f"/api/campaigns/{cid}/persona/export/html?download=1")
+        assert html.status_code == 200, html.text
+        html.headers["content-disposition"].encode("latin-1")
+        assert "filename*" in html.headers["content-disposition"]
+
     def test_400_before_personas_exist(self, tmp_path, monkeypatch):
         client = self._client(tmp_path, monkeypatch)
         cid = client.post("/api/campaigns", json={

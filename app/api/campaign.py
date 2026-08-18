@@ -19,6 +19,7 @@ from app.utils.file_handler import (
     save_campaign_json,
     save_diagnosis_file,
 )
+from app.utils.http import content_disposition_attachment
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -413,7 +414,7 @@ def export_personas_markdown(campaign_id: str, lang: str | None = Query(None)):
     return PlainTextResponse(
         content=md,
         media_type="text/markdown; charset=utf-8",
-        headers={"Content-Disposition": f"attachment; filename={campaign_id}_personas.md"},
+        headers=content_disposition_attachment(f"{campaign_id}_personas.md"),
     )
 
 
@@ -432,10 +433,7 @@ def export_personas_html(
     from app.services.export_service import export_personas_to_html
 
     html_doc = export_personas_to_html(data, language=lang or data.get("language", "zh"))
-    headers = (
-        {"Content-Disposition": f"attachment; filename={campaign_id}_personas.html"}
-        if download else {}
-    )
+    headers = content_disposition_attachment(f"{campaign_id}_personas.html") if download else {}
     return HTMLResponse(content=html_doc, headers=headers)
 
 
@@ -498,7 +496,7 @@ def export_plan_markdown(campaign_id: str, lang: str = Query("zh")):
     return PlainTextResponse(
         content=md,
         media_type="text/markdown; charset=utf-8",
-        headers={"Content-Disposition": f"attachment; filename={campaign_id}_plan.md"},
+        headers=content_disposition_attachment(f"{campaign_id}_plan.md"),
     )
 
 
@@ -898,7 +896,7 @@ def export_full_campaign(campaign_id: str):
     return Response(
         content=json.dumps(data, ensure_ascii=False, indent=2, default=str),
         media_type="application/json; charset=utf-8",
-        headers={"Content-Disposition": f"attachment; filename={campaign_id}_full.json"},
+        headers=content_disposition_attachment(f"{campaign_id}_full.json"),
     )
 
 
