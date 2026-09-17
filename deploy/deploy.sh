@@ -14,7 +14,7 @@ SERVICE="${SERVICE:-campaign-factory}"
 REGION="${REGION:-asia-east1}"
 # Resolved after the gcloud check below — a bare $(gcloud ...) here would abort
 # the script under `set -e` if gcloud is missing, before any useful message.
-PROJECT_ID="${PROJECT_ID:-}"
+PROJECT_ID="${PROJECT_ID:-st-china-ai-force}"
 
 # Campaign data is written to the container's own filesystem, and the write
 # lock (app/utils/file_handler.py) is a threading.Lock, which only serialises
@@ -37,11 +37,13 @@ CPU="${CPU:-1}"
 TIMEOUT="${TIMEOUT:-900}"
 
 # Non-secret runtime config.
-ENV_VARS="${ENV_VARS:-APP_ENV=production,DEFAULT_LANGUAGE=zh,DATA_DIR=/app/data}"
+ENV_VARS="${ENV_VARS:-APP_ENV=production,DEFAULT_LANGUAGE=zh,DATA_DIR=/app/data,GOOGLE_CLOUD_PROJECT=st-china-ai-force}"
 
-# Secret Manager secrets, mapped to the env vars the app reads. Leave empty to
-# skip. Format: ENV_NAME=secret-name:version,...
-SECRETS="${SECRETS:-}"
+# Secret Manager secrets → app env vars. Names match the existing Vite-prefixed
+# secrets in project st-china-ai-force (VITE_Kimi_API_KEY is mixed-case).
+# Doubao / Qwen keys exist in Secret Manager but this app does not read them.
+# Format: ENV_NAME=secret-name:version,...
+SECRETS="${SECRETS:-DEEPSEEK_API_KEY=VITE_DEEPSEEK_API_KEY:latest,KIMI_API_KEY=VITE_Kimi_API_KEY:latest,GEMINI_API_KEY=VITE_GEMINI_API_KEY:latest}"
 
 # ── PRE-FLIGHT ─────────────────────────────────────────────────────────────
 if ! command -v gcloud >/dev/null 2>&1; then

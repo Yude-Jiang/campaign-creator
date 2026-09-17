@@ -1090,6 +1090,33 @@ class TestGroundingHonesty:
         assert _extract_grounding_queries_rest(untouched) == []
         assert _extract_grounding_sources_rest(untouched) == []
 
+    def test_vertex_rest_uses_googleSearch_not_google_search(self):
+        """Vertex proto JSON is camelCase. google_search is silently dropped,
+        which made both persona and question phases look unsearched."""
+        import json
+
+        from app.services.providers.gemini import _vertex_generate_body
+
+        plain = _vertex_generate_body("hi", grounding=False)
+        assert "tools" not in plain
+
+        grounded = _vertex_generate_body("hi", grounding=True)
+        assert grounded["tools"] == [{"googleSearch": {}}]
+        dumped = json.dumps(grounded)
+        assert "googleSearch" in dumped
+        assert "google_search" not in dumped
+
+    def test_grounding_prompts_require_search_before_json(self):
+        """JSON-only as rule 1 let Gemini skip the optional search tool."""
+        for rel in (
+            "prompts/zh/persona_discovery.md",
+            "prompts/en/persona_discovery.md",
+            "prompts/zh/question_discovery.md",
+            "prompts/en/question_discovery.md",
+        ):
+            text = (APP_DIR / rel).read_text(encoding="utf-8")
+            assert "Google" in text and ("必须先检索" in text or "Search first" in text), rel
+
     def test_persona_phase_sources_are_not_discarded(self):
         """Phase 1's citations were overwritten by Phase 3's."""
         src = (APP_DIR / "services" / "persona_service.py").read_text(encoding="utf-8")
@@ -1531,6 +1558,36 @@ class TestPersonaExportEndpoints:
         download = client.get(f"/api/campaigns/{cid}/persona/export/html?download=1")
         assert download.status_code == 200
         assert download.headers["content-disposition"].endswith(f"{cid}_personas.html")
+
+    def test_cjk_campaign_id_download_does_not_latin1_crash(self, tmp_path, monkeypatch):
+        """CJK campaign IDs used to blow up Content-Disposition (latin-1 headers)."""
+        from urllib.parse import unquote
+
+        client = self._client(tmp_path, monkeypatch)
+        created = client.post("/api/campaigns", json={
+            "brief": {"name": "区域控制器方案", "topic": "ZCU", "language": "zh"},
+        })
+        assert created.status_code == 200
+        cid = created.json()["campaign_id"]
+        assert any(ord(c) > 127 for c in cid)
+
+        payload = dict(PERSONA_EXPORT_CAMPAIGN)
+        payload["campaign_id"] = cid
+        assert client.put(f"/api/campaigns/{cid}", json=payload).status_code == 200
+
+        resp = client.get(f"/api/campaigns/{cid}/persona/export/md")
+        assert resp.status_code == 200, resp.text
+        disp = resp.headers["content-disposition"]
+        disp.encode("latin-1")
+        assert "latin-1" not in resp.text
+        assert "filename*" in disp
+        assert unquote(disp.split("filename*=utf-8''", 1)[1]) == f"{cid}_personas.md"
+        assert "系统架构师" in resp.text
+
+        html = client.get(f"/api/campaigns/{cid}/persona/export/html?download=1")
+        assert html.status_code == 200, html.text
+        html.headers["content-disposition"].encode("latin-1")
+        assert "filename*" in html.headers["content-disposition"]
 
     def test_400_before_personas_exist(self, tmp_path, monkeypatch):
         client = self._client(tmp_path, monkeypatch)

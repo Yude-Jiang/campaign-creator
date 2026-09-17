@@ -4,7 +4,7 @@
 
 ```bash
 # Cloud Shell already has gcloud and git authenticated as you.
-gcloud config set project YOUR_PROJECT_ID
+gcloud config set project st-china-ai-force
 
 gcloud services enable \
   run.googleapis.com \
@@ -19,28 +19,23 @@ chmod +x deploy/deploy.sh
 
 ### Model credentials
 
-Put the keys in Secret Manager rather than in `--set-env-vars`, so they do not
-show up in `gcloud run services describe` output or in deploy logs:
-
-```bash
-printf '%s' 'sk-...'  | gcloud secrets create deepseek-api-key --data-file=-
-printf '%s' 'sk-...'  | gcloud secrets create kimi-api-key     --data-file=-
-printf '%s' 'AIza...' | gcloud secrets create gemini-api-key   --data-file=-   # optional
-```
-
-Grant the runtime service account read access:
+Keys already live in Secret Manager under Vite-prefixed names. Map them at
+deploy time (the script default does this). Grant the runtime service account
+read access to the three this app uses:
 
 ```bash
 PROJECT_NUMBER=$(gcloud projects describe "$(gcloud config get-value project)" \
   --format='value(projectNumber)')
 RUNTIME_SA="${PROJECT_NUMBER}-compute@developer.gserviceaccount.com"
 
-for s in deepseek-api-key kimi-api-key gemini-api-key; do
+for s in VITE_DEEPSEEK_API_KEY VITE_Kimi_API_KEY VITE_GEMINI_API_KEY; do
   gcloud secrets add-iam-policy-binding "$s" \
     --member="serviceAccount:${RUNTIME_SA}" \
     --role=roles/secretmanager.secretAccessor
 done
 ```
+
+`VITE_DOUBAO_API_KEY` and `VITE_QWEN_API_KEY` are unused by this service.
 
 ### Gemini via Vertex AI
 
@@ -63,7 +58,7 @@ the Vertex path.
 ```bash
 cd campaign-creator
 git fetch origin
-git checkout claude/project-review-uadnzt     # or main, once merged
+git checkout cursor/fix-vertex-google-search-grounding-2a71   # grounding fix; or master once merged
 git pull
 
 ./deploy/deploy.sh
@@ -72,13 +67,25 @@ git pull
 The script prints what it is about to do — project, service, region, branch,
 commit, instance limits — and asks before proceeding. `--yes` skips the prompt.
 
-Typical invocation with secrets and Vertex:
+Typical invocation with secrets and Vertex (defaults assume project
+`st-china-ai-force` and the existing `VITE_*_API_KEY` Secret Manager names):
 
 ```bash
-SECRETS='DEEPSEEK_API_KEY=deepseek-api-key:latest,KIMI_API_KEY=kimi-api-key:latest' \
-ENV_VARS='APP_ENV=production,DEFAULT_LANGUAGE=zh,DATA_DIR=/app/data,GOOGLE_CLOUD_PROJECT=YOUR_PROJECT_ID' \
 ./deploy/deploy.sh
 ```
+
+Override if needed:
+
+```bash
+PROJECT_ID=st-china-ai-force \
+SECRETS='DEEPSEEK_API_KEY=VITE_DEEPSEEK_API_KEY:latest,KIMI_API_KEY=VITE_Kimi_API_KEY:latest,GEMINI_API_KEY=VITE_GEMINI_API_KEY:latest' \
+ENV_VARS='APP_ENV=production,DEFAULT_LANGUAGE=zh,DATA_DIR=/app/data,GOOGLE_CLOUD_PROJECT=st-china-ai-force' \
+./deploy/deploy.sh
+```
+
+`VITE_DOUBAO_API_KEY` and `VITE_QWEN_API_KEY` are in Secret Manager but unused
+by this app. The runtime service account still needs `secretAccessor` on the
+three secrets that *are* mapped.
 
 Everything is overridable: `SERVICE`, `REGION`, `PROJECT_ID`, `MIN_INSTANCES`,
 `MAX_INSTANCES`, `MEMORY`, `CPU`, `TIMEOUT`, `ENV_VARS`, `SECRETS`.
